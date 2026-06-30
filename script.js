@@ -537,7 +537,6 @@ function renderGoogleButton() {
   window.google.accounts.id.initialize({
     client_id: appConfig.google_client_id,
     callback: window.handleGoogleCredential,
-    hosted_domain: appConfig.google_required_domain,
   });
   window.google.accounts.id.renderButton(googleButton, {
     theme: "outline",
