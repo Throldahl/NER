@@ -13,3 +13,4 @@ define('DEFAULT_ASSESSMENT_SLUG', 'winter_ner_2026');
 // This is not a client secret. Set this to the Hostinger site's web client ID.
 define('GOOGLE_CLIENT_ID', '263829567530-vtrokovcuiquddg70hj6h5rj0fm6f87i.apps.googleusercontent.com');
 define('GOOGLE_AUTH_REQUIRED_DOMAIN', '3playmedia.com');
+define('DEFAULT_ADMIN_EMAIL', 'dthroldahl@3playmedia.com');

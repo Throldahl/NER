@@ -79,9 +79,23 @@ function captionerner_google_domain(): string {
   return strtolower(trim((string)($config['allowed_domain'] ?? ($config['auth']['allowed_domain'] ?? CAPTIONERNER_GOOGLE_DOMAIN))));
 }
 
+function captionerner_default_admin_email(): string {
+  if (defined('DEFAULT_ADMIN_EMAIL')) {
+    $email = strtolower(trim((string)DEFAULT_ADMIN_EMAIL));
+    if ($email !== '') return $email;
+  }
+
+  $config = captionerner_local_config();
+  return strtolower(trim((string)($config['default_admin_email'] ?? 'dthroldahl@3playmedia.com')));
+}
+
 function captionerner_is_google_domain_email(string $email): bool {
   $email = strtolower(trim($email));
   return str_ends_with($email, '@' . captionerner_google_domain());
+}
+
+function captionerner_is_default_admin_email(string $email): bool {
+  return strtolower(trim($email)) === captionerner_default_admin_email();
 }
 
 function captionerner_table_exists(PDO $pdo, string $table): bool {
@@ -349,15 +363,21 @@ function captionerner_seed_default_test(PDO $pdo): int {
 }
 
 function captionerner_seed_default_admin(PDO $pdo, int $defaultTestId): void {
+  $email = captionerner_default_admin_email();
+  if ($email === '') return;
+
   $stmt = $pdo->prepare("
     INSERT INTO captionerner_users (email, role, is_active, test_id)
-    VALUES ('dthroldahl@3playmedia.com', 'admin', 1, :test_id)
+    VALUES (:email, 'admin', 1, :test_id)
     ON DUPLICATE KEY UPDATE
       role = 'admin',
       is_active = 1,
       test_id = COALESCE(test_id, VALUES(test_id))
   ");
-  $stmt->execute([':test_id' => $defaultTestId > 0 ? $defaultTestId : null]);
+  $stmt->execute([
+    ':email' => $email,
+    ':test_id' => $defaultTestId > 0 ? $defaultTestId : null,
+  ]);
 }
 
 function captionerner_file_size(string $relativePath): int {
@@ -385,6 +405,65 @@ function captionerner_fetch_user(PDO $pdo, string $email): ?array {
   $stmt->execute([strtolower(trim($email))]);
   $row = $stmt->fetch();
   return $row ?: null;
+}
+
+function captionerner_bootstrap_default_admin(PDO $pdo, string $email): ?array {
+  $email = strtolower(trim($email));
+  if (!captionerner_is_default_admin_email($email)) return null;
+
+  try {
+    if (!captionerner_table_exists($pdo, 'captionerner_users')) {
+      $pdo->exec("
+        CREATE TABLE IF NOT EXISTS captionerner_users (
+          id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+          email VARCHAR(255) NOT NULL,
+          role VARCHAR(32) NOT NULL DEFAULT 'captioner',
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          password_hash VARCHAR(255) NULL,
+          test_id INT UNSIGNED NULL,
+          last_login_at DATETIME NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          UNIQUE KEY uniq_captionerner_users_email (email),
+          KEY idx_captionerner_users_test_id (test_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      ");
+    }
+
+    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'role', "role VARCHAR(32) NOT NULL DEFAULT 'captioner'");
+    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'is_active', 'is_active TINYINT(1) NOT NULL DEFAULT 1');
+    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'test_id', 'test_id INT UNSIGNED NULL');
+    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'last_login_at', 'last_login_at DATETIME NULL');
+    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'created_at', 'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
+    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'updated_at', 'updated_at DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP');
+
+    $defaultTestId = null;
+    if (captionerner_table_exists($pdo, 'captionerner_tests')) {
+      $lookup = $pdo->prepare("SELECT id FROM captionerner_tests WHERE slug = 'winter_ner_2026' AND deleted_at IS NULL LIMIT 1");
+      $lookup->execute();
+      $found = $lookup->fetchColumn();
+      $defaultTestId = $found ? (int)$found : null;
+    }
+
+    $stmt = $pdo->prepare("
+      INSERT INTO captionerner_users (email, role, is_active, test_id)
+      VALUES (:email, 'admin', 1, :test_id)
+      ON DUPLICATE KEY UPDATE
+        role = 'admin',
+        is_active = 1,
+        test_id = COALESCE(test_id, VALUES(test_id))
+    ");
+    $stmt->execute([
+      ':email' => $email,
+      ':test_id' => $defaultTestId,
+    ]);
+
+    return captionerner_fetch_user($pdo, $email);
+  } catch (Throwable $e) {
+    error_log('captionerner default admin bootstrap failed: ' . $e->getMessage());
+    return null;
+  }
 }
 
 function captionerner_fetch_test(PDO $pdo, ?int $testId): ?array {

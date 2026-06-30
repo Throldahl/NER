@@ -92,12 +92,16 @@ try {
     }
 
     $user = captionerner_fetch_user($pdo, $google['email']);
+    if ((!$user || (int)$user['is_active'] !== 1) && captionerner_is_default_admin_email($google['email'])) {
+      $user = captionerner_bootstrap_default_admin($pdo, $google['email']);
+    }
+
     if (!$user || (int)$user['is_active'] !== 1) {
       captionerner_log_activity($pdo, 'login_denied', 'Login denied', [
         'user_email' => $google['email'],
         'details' => ['reason' => 'unknown_or_inactive', 'auth_method' => 'google'],
       ]);
-      captionerner_json_out(['ok' => false, 'message' => 'Google account is valid, but this email has not been added for access.'], 403);
+      captionerner_json_out(['ok' => false, 'message' => 'Google account is valid, but ' . $google['email'] . ' has not been added for access.'], 403);
     }
 
     captionerner_json_out(captionerner_set_login_session($pdo, $user, 'google'));
