@@ -31,14 +31,40 @@ function captionerner_json_out(array $data, int $code = 200): void {
   exit;
 }
 
+function captionerner_local_config(): array {
+  static $config = null;
+  if (is_array($config)) return $config;
+
+  $config = [];
+  $path = __DIR__ . '/configs/config.php';
+  if (is_file($path)) {
+    $loaded = require $path;
+    if (is_array($loaded)) {
+      $config = $loaded;
+    }
+  }
+
+  return $config;
+}
+
 function captionerner_google_client_id(): string {
-  return defined('GOOGLE_CLIENT_ID') ? trim((string)GOOGLE_CLIENT_ID) : '';
+  if (defined('GOOGLE_CLIENT_ID')) {
+    $clientId = trim((string)GOOGLE_CLIENT_ID);
+    if ($clientId !== '') return $clientId;
+  }
+
+  $config = captionerner_local_config();
+  return trim((string)($config['google_client_id'] ?? ($config['auth']['google_client_id'] ?? '')));
 }
 
 function captionerner_google_domain(): string {
-  return defined('GOOGLE_AUTH_REQUIRED_DOMAIN')
-    ? strtolower(trim((string)GOOGLE_AUTH_REQUIRED_DOMAIN))
-    : CAPTIONERNER_GOOGLE_DOMAIN;
+  if (defined('GOOGLE_AUTH_REQUIRED_DOMAIN')) {
+    $domain = strtolower(trim((string)GOOGLE_AUTH_REQUIRED_DOMAIN));
+    if ($domain !== '') return $domain;
+  }
+
+  $config = captionerner_local_config();
+  return strtolower(trim((string)($config['allowed_domain'] ?? ($config['auth']['allowed_domain'] ?? CAPTIONERNER_GOOGLE_DOMAIN))));
 }
 
 function captionerner_is_google_domain_email(string $email): bool {
