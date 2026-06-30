@@ -83,6 +83,7 @@ const mediaHelp = byId("mediaHelp");
 let appConfig = {
   google_client_id: "",
   google_required_domain: "3playmedia.com",
+  config_loaded: false,
   test_audio_max_mb: 50,
   source_media_max_mb: 500,
   allowed_test_audio: ["mp3", "wav", "m4a", "aac"],
@@ -484,7 +485,9 @@ async function emailLogin() {
       loginMessage,
       appConfig.google_client_id
         ? `Use Google Sign-In for @${appConfig.google_required_domain} accounts.`
-        : "Google Sign-In is required but the client ID is not configured yet.",
+        : appConfig.config_loaded
+          ? "Google Sign-In is required, but the client ID is not configured yet."
+          : "Google Sign-In configuration could not be loaded. Refresh and try again.",
     );
     return;
   }
@@ -549,7 +552,7 @@ function renderGoogleButton() {
 async function loadConfig() {
   const r = await postJSON(API_AUTH, { action: "config" });
   if (r.ok && r.data && r.data.ok) {
-    appConfig = { ...appConfig, ...r.data };
+    appConfig = { ...appConfig, ...r.data, config_loaded: true };
     mediaHelp.textContent = `Test audio: ${appConfig.allowed_test_audio.join(", ")} up to ${appConfig.test_audio_max_mb} MB. Source media: ${appConfig.allowed_source_media.join(", ")} up to ${appConfig.source_media_max_mb} MB.`;
     renderGoogleButton();
   }

@@ -14,21 +14,21 @@ if (!is_array($body)) $body = [];
 
 $action = (string)($body['action'] ?? '');
 
+if ($action === 'config') {
+  captionerner_json_out([
+    'ok' => true,
+    'google_client_id' => captionerner_google_client_id(),
+    'google_required_domain' => captionerner_google_domain(),
+    'test_audio_max_mb' => (int)(CAPTIONERNER_TEST_AUDIO_MAX_BYTES / 1048576),
+    'source_media_max_mb' => (int)(CAPTIONERNER_SOURCE_MEDIA_MAX_BYTES / 1048576),
+    'allowed_test_audio' => captionerner_allowed_uploads('test_audio')['extensions'],
+    'allowed_source_media' => captionerner_allowed_uploads('source')['extensions'],
+  ]);
+}
+
 try {
   $pdo = captionerner_db();
   captionerner_ensure_schema($pdo);
-
-  if ($action === 'config') {
-    captionerner_json_out([
-      'ok' => true,
-      'google_client_id' => captionerner_google_client_id(),
-      'google_required_domain' => captionerner_google_domain(),
-      'test_audio_max_mb' => (int)(CAPTIONERNER_TEST_AUDIO_MAX_BYTES / 1048576),
-      'source_media_max_mb' => (int)(CAPTIONERNER_SOURCE_MEDIA_MAX_BYTES / 1048576),
-      'allowed_test_audio' => captionerner_allowed_uploads('test_audio')['extensions'],
-      'allowed_source_media' => captionerner_allowed_uploads('source')['extensions'],
-    ]);
-  }
 
   if ($action === 'whoami') {
     $email = $_SESSION['user_email'] ?? null;
