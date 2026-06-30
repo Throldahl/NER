@@ -63,6 +63,8 @@ const addUserForm = byId("addUserForm");
 const newUserEmail = byId("newUserEmail");
 const newUserRole = byId("newUserRole");
 const newUserTest = byId("newUserTest");
+const bulk3PlayTest = byId("bulk3PlayTest");
+const bulk3PlayAssignBtn = byId("bulk3PlayAssignBtn");
 
 const testForm = byId("testForm");
 const testIdInput = byId("testId");
@@ -787,11 +789,11 @@ async function loadAdminReferenceData() {
   populateAllSelects();
 }
 
-function populateTestSelect(select, selected = "", includeAll = false) {
+function populateTestSelect(select, selected = "", includeAll = false, blankLabel = "Unassigned") {
   const value = String(selected || "");
   const options = [];
   if (includeAll) options.push(`<option value="0">All tests</option>`);
-  else options.push(`<option value="">Unassigned</option>`);
+  else options.push(`<option value="">${escapeHtml(blankLabel)}</option>`);
   adminTests.forEach((test) => {
     options.push(
       `<option value="${test.id}" ${String(test.id) === value ? "selected" : ""}>${escapeHtml(test.title)}</option>`,
@@ -816,6 +818,7 @@ function populateAllSelects() {
   populateTestSelect(metricsTestFilter, metricsTestFilter.value, true);
   populateTestSelect(activityTestFilter, activityTestFilter.value, true);
   populateTestSelect(newUserTest, newUserTest.value, false);
+  populateTestSelect(bulk3PlayTest, bulk3PlayTest.value, false, "Choose a test");
   populateMediaSelect(testAudioSelect, "test_audio", testAudioSelect.value);
   populateMediaSelect(sourceMediaSelect, "source", sourceMediaSelect.value);
 }
@@ -995,6 +998,37 @@ addUserForm.addEventListener("submit", async (e) => {
   newUserEmail.value = "";
   newUserRole.value = "captioner";
   newUserTest.value = "";
+  await loadUsers();
+});
+
+bulk3PlayAssignBtn.addEventListener("click", async () => {
+  const testId = bulk3PlayTest.value || "";
+  const test = adminTests.find((t) => String(t.id) === String(testId));
+  if (!testId || !test) {
+    alert("Choose a test first.");
+    return;
+  }
+
+  if (!confirm(`Assign all @${appConfig.google_required_domain} users to "${test.title}"?`)) {
+    return;
+  }
+
+  bulk3PlayAssignBtn.disabled = true;
+  const r = await postJSON(API_ADMIN, {
+    action: "users_bulk_assign_3play",
+    test_id: testId,
+  });
+  bulk3PlayAssignBtn.disabled = false;
+
+  if (!r.ok || !r.data || !r.data.ok) {
+    alert((r.data && (r.data.message || r.data.error)) || "Bulk assignment failed.");
+    return;
+  }
+
+  const matched = Number(r.data.matched_count || 0);
+  const changed = Number(r.data.changed_count || 0);
+  alert(`Assigned "${test.title}" to ${matched} @${appConfig.google_required_domain} user(s). ${changed} row(s) changed.`);
+  await loadAdminReferenceData();
   await loadUsers();
 });
 

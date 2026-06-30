@@ -60,13 +60,6 @@ try {
     ]);
 
     $assessmentId = (int)$pdo->lastInsertId();
-    captionerner_log_activity($pdo, 'test_loaded', 'Opened assigned test', [
-      'user_id' => $userId,
-      'user_email' => $userEmail,
-      'test_id' => $testId,
-      'assessment_id' => $assessmentId,
-      'details' => ['test_title' => $test['title']],
-    ]);
 
     echo json_encode(['ok' => true, 'session_id' => $assessmentId]);
     exit;

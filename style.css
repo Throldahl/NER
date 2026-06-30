@@ -157,6 +157,29 @@ select {
   outline: none;
 }
 
+select {
+  color-scheme: light;
+  background-color: #f8fafc;
+  color: #172033;
+  border-color: rgba(15, 23, 42, 0.22);
+}
+
+select:focus {
+  border-color: rgba(125, 211, 252, 0.8);
+  box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.18);
+}
+
+select option,
+select optgroup {
+  background-color: #f8fafc;
+  color: #172033;
+}
+
+select option:checked {
+  background-color: #dbeafe;
+  color: #0f172a;
+}
+
 input[type="file"] {
   min-height: 42px;
 }
@@ -753,6 +776,13 @@ th {
 
 .admin-filter-row > div {
   min-width: min(340px, 100%);
+}
+
+.bulk-assign-row {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .form-grid-2 {

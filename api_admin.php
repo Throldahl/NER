@@ -353,6 +353,57 @@ try {
     captionerner_json_out(['ok' => true]);
   }
 
+  if ($action === 'users_bulk_assign_3play') {
+    $testId = isset($body['test_id']) && (int)$body['test_id'] > 0 ? (int)$body['test_id'] : 0;
+    if ($testId <= 0) captionerner_json_out(['ok' => false, 'message' => 'Choose a test first.'], 400);
+    if (!admin_test_exists($pdo, $testId)) captionerner_json_out(['ok' => false, 'message' => 'Assigned test not found.'], 400);
+
+    $domain = captionerner_google_domain();
+    $domainLike = '%@' . addcslashes($domain, '\_%');
+
+    $countStmt = $pdo->prepare("
+      SELECT COUNT(*)
+      FROM captionerner_users
+      WHERE LOWER(TRIM(email)) LIKE ? ESCAPE '\\\\'
+    ");
+    $countStmt->execute([$domainLike]);
+    $matchedCount = (int)$countStmt->fetchColumn();
+
+    $changeStmt = $pdo->prepare("
+      SELECT COUNT(*)
+      FROM captionerner_users
+      WHERE LOWER(TRIM(email)) LIKE ? ESCAPE '\\\\'
+        AND (test_id IS NULL OR test_id <> ?)
+    ");
+    $changeStmt->execute([$domainLike, $testId]);
+    $changedCount = (int)$changeStmt->fetchColumn();
+
+    $updateStmt = $pdo->prepare("
+      UPDATE captionerner_users
+      SET test_id = ?, updated_at = NOW()
+      WHERE LOWER(TRIM(email)) LIKE ? ESCAPE '\\\\'
+        AND (test_id IS NULL OR test_id <> ?)
+    ");
+    $updateStmt->execute([$testId, $domainLike, $testId]);
+
+    captionerner_log_activity($pdo, 'admin_users_bulk_assigned', 'Admin bulk assigned 3Play users', [
+      'user_id' => $adminId,
+      'user_email' => $adminEmail,
+      'test_id' => $testId,
+      'details' => [
+        'domain' => $domain,
+        'matched_count' => $matchedCount,
+        'changed_count' => $changedCount,
+      ],
+    ]);
+
+    captionerner_json_out([
+      'ok' => true,
+      'matched_count' => $matchedCount,
+      'changed_count' => $changedCount,
+    ]);
+  }
+
   if ($action === 'users_deactivate' || $action === 'users_reactivate') {
     $id = (int)($body['user_id'] ?? 0);
     if ($id <= 0) captionerner_json_out(['ok' => false, 'message' => 'Missing user_id.'], 400);
