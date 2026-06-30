@@ -143,6 +143,14 @@ function captionerner_add_index_if_missing(PDO $pdo, string $table, string $inde
   $pdo->exec("ALTER TABLE `{$table}` ADD {$definition}");
 }
 
+function captionerner_try_add_column(PDO $pdo, string $table, string $column, string $definition): void {
+  try {
+    captionerner_add_column_if_missing($pdo, $table, $column, $definition);
+  } catch (Throwable $e) {
+    error_log("captionerner could not add {$table}.{$column}: " . $e->getMessage());
+  }
+}
+
 function captionerner_ensure_schema(PDO $pdo): void {
   static $done = false;
   if ($done) return;
@@ -400,11 +408,74 @@ function captionerner_sanitize_html(string $html): string {
 
 function captionerner_fetch_user(PDO $pdo, string $email): ?array {
   if (!captionerner_table_exists($pdo, 'captionerner_users')) return null;
+  $roleColumn = captionerner_column_exists($pdo, 'captionerner_users', 'role') ? 'role' : "'captioner' AS role";
+  $activeColumn = captionerner_column_exists($pdo, 'captionerner_users', 'is_active') ? 'is_active' : '1 AS is_active';
   $testColumn = captionerner_column_exists($pdo, 'captionerner_users', 'test_id') ? 'test_id' : 'NULL AS test_id';
-  $stmt = $pdo->prepare("SELECT id, email, role, is_active, {$testColumn} FROM captionerner_users WHERE email = ? LIMIT 1");
+  $stmt = $pdo->prepare("SELECT id, email, {$roleColumn}, {$activeColumn}, {$testColumn} FROM captionerner_users WHERE LOWER(TRIM(email)) = ? LIMIT 1");
   $stmt->execute([strtolower(trim($email))]);
   $row = $stmt->fetch();
   return $row ?: null;
+}
+
+function captionerner_user_lookup_debug(PDO $pdo, string $email): array {
+  $email = strtolower(trim($email));
+  $debug = [
+    'database' => null,
+    'table_exists' => false,
+    'columns' => [],
+    'direct_count' => null,
+    'normalized_count' => null,
+    'row' => null,
+  ];
+
+  try {
+    $debug['database'] = (string)($pdo->query('SELECT DATABASE()')->fetchColumn() ?: '');
+  } catch (Throwable $e) {
+    $debug['database'] = 'unavailable: ' . $e->getMessage();
+  }
+
+  $debug['table_exists'] = captionerner_table_exists($pdo, 'captionerner_users');
+  if (!$debug['table_exists']) return $debug;
+
+  try {
+    $cols = $pdo->query('SHOW COLUMNS FROM captionerner_users')->fetchAll();
+    $debug['columns'] = array_map(static fn($c) => (string)$c['Field'], $cols ?: []);
+  } catch (Throwable $e) {
+    $debug['columns'] = ['unavailable: ' . $e->getMessage()];
+  }
+
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM captionerner_users WHERE email = ?');
+    $stmt->execute([$email]);
+    $debug['direct_count'] = (int)$stmt->fetchColumn();
+  } catch (Throwable $e) {
+    $debug['direct_count'] = 'error: ' . $e->getMessage();
+  }
+
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM captionerner_users WHERE LOWER(TRIM(email)) = ?');
+    $stmt->execute([$email]);
+    $debug['normalized_count'] = (int)$stmt->fetchColumn();
+  } catch (Throwable $e) {
+    $debug['normalized_count'] = 'error: ' . $e->getMessage();
+  }
+
+  try {
+    $roleColumn = captionerner_column_exists($pdo, 'captionerner_users', 'role') ? 'role' : "'captioner' AS role";
+    $activeColumn = captionerner_column_exists($pdo, 'captionerner_users', 'is_active') ? 'is_active' : '1 AS is_active';
+    $stmt = $pdo->prepare("
+      SELECT id, email, CHAR_LENGTH(email) AS email_len, HEX(email) AS email_hex, {$roleColumn}, {$activeColumn}
+      FROM captionerner_users
+      WHERE LOWER(TRIM(email)) = ?
+      LIMIT 1
+    ");
+    $stmt->execute([$email]);
+    $debug['row'] = $stmt->fetch() ?: null;
+  } catch (Throwable $e) {
+    $debug['row'] = ['error' => $e->getMessage()];
+  }
+
+  return $debug;
 }
 
 function captionerner_bootstrap_default_admin(PDO $pdo, string $email): ?array {
@@ -431,36 +502,60 @@ function captionerner_bootstrap_default_admin(PDO $pdo, string $email): ?array {
       ");
     }
 
-    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'role', "role VARCHAR(32) NOT NULL DEFAULT 'captioner'");
-    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'is_active', 'is_active TINYINT(1) NOT NULL DEFAULT 1');
-    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'test_id', 'test_id INT UNSIGNED NULL');
-    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'last_login_at', 'last_login_at DATETIME NULL');
-    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'created_at', 'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
-    captionerner_add_column_if_missing($pdo, 'captionerner_users', 'updated_at', 'updated_at DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP');
+    captionerner_try_add_column($pdo, 'captionerner_users', 'role', "role VARCHAR(32) NOT NULL DEFAULT 'captioner'");
+    captionerner_try_add_column($pdo, 'captionerner_users', 'is_active', 'is_active TINYINT(1) NOT NULL DEFAULT 1');
+    captionerner_try_add_column($pdo, 'captionerner_users', 'test_id', 'test_id INT UNSIGNED NULL');
+    captionerner_try_add_column($pdo, 'captionerner_users', 'last_login_at', 'last_login_at DATETIME NULL');
+    captionerner_try_add_column($pdo, 'captionerner_users', 'created_at', 'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
+    captionerner_try_add_column($pdo, 'captionerner_users', 'updated_at', 'updated_at DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP');
 
-    $defaultTestId = null;
-    if (captionerner_table_exists($pdo, 'captionerner_tests')) {
-      $lookup = $pdo->prepare("SELECT id FROM captionerner_tests WHERE slug = 'winter_ner_2026' AND deleted_at IS NULL LIMIT 1");
-      $lookup->execute();
-      $found = $lookup->fetchColumn();
-      $defaultTestId = $found ? (int)$found : null;
+    $hasRole = captionerner_column_exists($pdo, 'captionerner_users', 'role');
+    $hasActive = captionerner_column_exists($pdo, 'captionerner_users', 'is_active');
+    $hasTestId = captionerner_column_exists($pdo, 'captionerner_users', 'test_id');
+
+    $lookup = $pdo->prepare('SELECT id FROM captionerner_users WHERE email = ? LIMIT 1');
+    $lookup->execute([$email]);
+    $existingId = (int)($lookup->fetchColumn() ?: 0);
+
+    if ($existingId > 0) {
+      $sets = [];
+      $params = [':id' => $existingId];
+      if ($hasRole) {
+        $sets[] = "role = 'admin'";
+      }
+      if ($hasActive) {
+        $sets[] = 'is_active = 1';
+      }
+      if ($hasTestId) {
+        $sets[] = 'test_id = COALESCE(test_id, NULL)';
+      }
+      if ($sets) {
+        $stmt = $pdo->prepare('UPDATE captionerner_users SET ' . implode(', ', $sets) . ' WHERE id = :id LIMIT 1');
+        $stmt->execute($params);
+      }
+    } else {
+      $columns = ['email'];
+      $values = [':email'];
+      $params = [':email' => $email];
+      if ($hasRole) {
+        $columns[] = 'role';
+        $values[] = "'admin'";
+      }
+      if ($hasActive) {
+        $columns[] = 'is_active';
+        $values[] = '1';
+      }
+      if ($hasTestId) {
+        $columns[] = 'test_id';
+        $values[] = 'NULL';
+      }
+      $stmt = $pdo->prepare('INSERT INTO captionerner_users (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $values) . ')');
+      $stmt->execute($params);
     }
-
-    $stmt = $pdo->prepare("
-      INSERT INTO captionerner_users (email, role, is_active, test_id)
-      VALUES (:email, 'admin', 1, :test_id)
-      ON DUPLICATE KEY UPDATE
-        role = 'admin',
-        is_active = 1,
-        test_id = COALESCE(test_id, VALUES(test_id))
-    ");
-    $stmt->execute([
-      ':email' => $email,
-      ':test_id' => $defaultTestId,
-    ]);
 
     return captionerner_fetch_user($pdo, $email);
   } catch (Throwable $e) {
+    $GLOBALS['captionerner_bootstrap_error'] = $e->getMessage();
     error_log('captionerner default admin bootstrap failed: ' . $e->getMessage());
     return null;
   }

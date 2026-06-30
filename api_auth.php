@@ -63,6 +63,20 @@ try {
     captionerner_json_out(['ok' => true]);
   }
 
+  if ($action === 'debug_user') {
+    $email = strtolower(trim((string)($body['email'] ?? '')));
+    if (!captionerner_is_default_admin_email($email)) {
+      captionerner_json_out(['ok' => false, 'message' => 'Debug is only available for the configured bootstrap admin.'], 403);
+    }
+
+    captionerner_json_out([
+      'ok' => true,
+      'email' => $email,
+      'default_admin_email' => captionerner_default_admin_email(),
+      'lookup' => captionerner_user_lookup_debug($pdo, $email),
+    ]);
+  }
+
   if ($action === 'email_login' || $action === 'gate') {
     $email = strtolower(trim((string)($body['email'] ?? '')));
     if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -97,11 +111,22 @@ try {
     }
 
     if (!$user || (int)$user['is_active'] !== 1) {
+      $bootstrapDetail = '';
+      if (captionerner_is_default_admin_email($google['email']) && !empty($GLOBALS['captionerner_bootstrap_error'])) {
+        $bootstrapDetail = ' Bootstrap failed: ' . $GLOBALS['captionerner_bootstrap_error'];
+      }
+      if (captionerner_is_default_admin_email($google['email'])) {
+        $debug = captionerner_user_lookup_debug($pdo, $google['email']);
+        $bootstrapDetail .= ' Lookup database=' . ($debug['database'] ?? 'unknown') .
+          ' table=' . (!empty($debug['table_exists']) ? 'yes' : 'no') .
+          ' direct=' . ($debug['direct_count'] ?? 'unknown') .
+          ' normalized=' . ($debug['normalized_count'] ?? 'unknown');
+      }
       captionerner_log_activity($pdo, 'login_denied', 'Login denied', [
         'user_email' => $google['email'],
         'details' => ['reason' => 'unknown_or_inactive', 'auth_method' => 'google'],
       ]);
-      captionerner_json_out(['ok' => false, 'message' => 'Google account is valid, but ' . $google['email'] . ' has not been added for access.'], 403);
+      captionerner_json_out(['ok' => false, 'message' => 'Google account is valid, but ' . $google['email'] . ' has not been added for access.' . $bootstrapDetail], 403);
     }
 
     captionerner_json_out(captionerner_set_login_session($pdo, $user, 'google'));
