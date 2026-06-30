@@ -85,23 +85,37 @@ function captionerner_is_google_domain_email(string $email): bool {
 }
 
 function captionerner_table_exists(PDO $pdo, string $table): bool {
-  $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
-  $stmt->execute([$table]);
-  return (bool)$stmt->fetch();
+  try {
+    $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+    $stmt->execute([$table]);
+    return (bool)$stmt->fetch();
+  } catch (Throwable $e) {
+    return false;
+  }
 }
 
 function captionerner_column_exists(PDO $pdo, string $table, string $column): bool {
   if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) return false;
-  $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
-  $stmt->execute([$column]);
-  return (bool)$stmt->fetch();
+  if (!captionerner_table_exists($pdo, $table)) return false;
+  try {
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
+    $stmt->execute([$column]);
+    return (bool)$stmt->fetch();
+  } catch (Throwable $e) {
+    return false;
+  }
 }
 
 function captionerner_index_exists(PDO $pdo, string $table, string $index): bool {
   if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) return false;
-  $stmt = $pdo->prepare("SHOW INDEX FROM `{$table}` WHERE Key_name = ?");
-  $stmt->execute([$index]);
-  return (bool)$stmt->fetch();
+  if (!captionerner_table_exists($pdo, $table)) return false;
+  try {
+    $stmt = $pdo->prepare("SHOW INDEX FROM `{$table}` WHERE Key_name = ?");
+    $stmt->execute([$index]);
+    return (bool)$stmt->fetch();
+  } catch (Throwable $e) {
+    return false;
+  }
 }
 
 function captionerner_add_column_if_missing(PDO $pdo, string $table, string $column, string $definition): bool {
@@ -365,6 +379,7 @@ function captionerner_sanitize_html(string $html): string {
 }
 
 function captionerner_fetch_user(PDO $pdo, string $email): ?array {
+  if (!captionerner_table_exists($pdo, 'captionerner_users')) return null;
   $testColumn = captionerner_column_exists($pdo, 'captionerner_users', 'test_id') ? 'test_id' : 'NULL AS test_id';
   $stmt = $pdo->prepare("SELECT id, email, role, is_active, {$testColumn} FROM captionerner_users WHERE email = ? LIMIT 1");
   $stmt->execute([strtolower(trim($email))]);

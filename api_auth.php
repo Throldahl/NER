@@ -42,7 +42,8 @@ try {
       captionerner_json_out(['ok' => false, 'message' => 'Not logged in.'], 200);
     }
 
-    $stmt = $pdo->prepare('SELECT id, email, role, is_active, test_id FROM captionerner_users WHERE id = ? LIMIT 1');
+    $testColumn = captionerner_column_exists($pdo, 'captionerner_users', 'test_id') ? 'test_id' : 'NULL AS test_id';
+    $stmt = $pdo->prepare("SELECT id, email, role, is_active, {$testColumn} FROM captionerner_users WHERE id = ? LIMIT 1");
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
     if (!$user || (int)$user['is_active'] !== 1) {

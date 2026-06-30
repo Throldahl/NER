@@ -208,6 +208,14 @@ function setMessage(el, text, ok = false) {
   el.classList.toggle("ok", ok);
 }
 
+function responseMessage(data, fallback) {
+  if (!data) return fallback;
+  if (data.message) return data.message;
+  if (data.detail) return `${data.error || "Server error."} ${data.detail}`;
+  if (data.error) return data.error;
+  return fallback;
+}
+
 function pageIsActive() {
   return document.visibilityState === "visible" && document.hasFocus();
 }
@@ -498,7 +506,7 @@ async function emailLogin() {
   if (!r.ok || !r.data || !r.data.ok) {
     setMessage(
       loginMessage,
-      (r.data && (r.data.message || r.data.error)) || "Access denied.",
+      responseMessage(r.data, "Access denied."),
     );
     return;
   }
@@ -514,7 +522,7 @@ async function googleLogin(credential) {
   if (!r.ok || !r.data || !r.data.ok) {
     setMessage(
       loginMessage,
-      (r.data && (r.data.message || r.data.error)) || "Google login failed.",
+      responseMessage(r.data, "Google login failed."),
     );
     return;
   }
