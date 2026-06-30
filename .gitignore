@@ -2,3 +2,5 @@
 configs/config.php
 .env
 *.log
+uploads/ner-media/*
+!uploads/ner-media/.gitkeep

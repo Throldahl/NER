@@ -1,61 +1,119 @@
 "use strict";
 
-/**
- * v1.6 — Integrated Admin Dashboard (Metrics + Users) + Pre-start Metrics Logging
- * Keeps the core assessment flow: email gate -> countdown -> unskippable video.
- */
-
 const API_AUTH = "api_auth.php";
 const API_METRICS = "api_metrics.php";
 const API_ADMIN = "api_admin.php";
 
-// ------- DOM -------
-const startBtn = document.getElementById("startBtn");
-const emailInput = document.getElementById("email");
-const errorMessage = document.getElementById("error-message");
-const countdownSection = document.getElementById("countdown-section");
-const countdownSpan = document.getElementById("countdown");
-const videoSection = document.getElementById("video-section");
-const assessmentAudio = document.getElementById("assessmentAudio");
-const progressFill = document.getElementById("progressFill");
-const timeCurrent = document.getElementById("timeCurrent");
-const timeTotal = document.getElementById("timeTotal");
-const assessmentVisualizer = document.getElementById("assessmentVisualizer");
+const byId = (id) => document.getElementById(id);
+
+const siteTitle = byId("siteTitle");
+const siteSubtitle = byId("siteSubtitle");
+const sessionTools = byId("sessionTools");
+const sessionEmail = byId("sessionEmail");
+const logoutBtn = byId("logoutBtn");
+
+const loginGate = byId("loginGate");
+const loginEmail = byId("loginEmail");
+const emailLoginBtn = byId("emailLoginBtn");
+const googleSignInArea = byId("googleSignInArea");
+const googleButton = byId("googleButton");
+const loginMessage = byId("loginMessage");
+
+const unassignedSection = byId("unassignedSection");
+const assessmentApp = byId("assessmentApp");
+const instructionsContent = byId("instructionsContent");
+const prepContent = byId("prepContent");
+
+const startBtn = byId("startBtn");
+const errorMessage = byId("error-message");
+const countdownSection = byId("countdown-section");
+const countdownSpan = byId("countdown");
+const videoSection = byId("video-section");
+const assessmentAudio = byId("assessmentAudio");
+const assessmentVideo = byId("assessmentVideo");
+const progressFill = byId("progressFill");
+const timeCurrent = byId("timeCurrent");
+const timeTotal = byId("timeTotal");
+const playerLabel = byId("playerLabel");
+const assessmentVisualizer = byId("assessmentVisualizer");
 const assessmentBars = assessmentVisualizer.querySelectorAll(".bar");
-const testAudioBtn = document.getElementById("testAudioBtn");
-const testAudio = document.getElementById("testAudio");
-const cancelCountdownBtn = document.getElementById("cancelCountdownBtn");
-const audioVisualizer = document.getElementById("audioVisualizer");
+const testAudioBtn = byId("testAudioBtn");
+const testAudio = byId("testAudio");
+const cancelCountdownBtn = byId("cancelCountdownBtn");
+const audioVisualizer = byId("audioVisualizer");
 const bars = audioVisualizer.querySelectorAll(".bar");
 
-// Admin DOM
-const adminOpenBtn = document.getElementById("adminOpenBtn");
-const adminDashboard = document.getElementById("adminDashboard");
-const adminRefreshBtn = document.getElementById("adminRefreshBtn");
-const adminLogoutBtn = document.getElementById("adminLogoutBtn");
+const adminDashboard = byId("adminDashboard");
+const adminRefreshBtn = byId("adminRefreshBtn");
 const tabButtons = document.querySelectorAll(".tabbtn");
-const metricsTab = document.getElementById("metricsTab");
-const usersTab = document.getElementById("usersTab");
-const metricsBody = document.getElementById("metricsBody");
-const usersBody = document.getElementById("usersBody");
+const metricsTab = byId("metricsTab");
+const activityTab = byId("activityTab");
+const usersTab = byId("usersTab");
+const testsTab = byId("testsTab");
+const mediaTab = byId("mediaTab");
+const metricsBody = byId("metricsBody");
+const activityBody = byId("activityBody");
+const usersBody = byId("usersBody");
+const testsBody = byId("testsBody");
+const mediaBody = byId("mediaBody");
+const metricsTestFilter = byId("metricsTestFilter");
+const activityTestFilter = byId("activityTestFilter");
 
-const adminOverlay = document.getElementById("adminOverlay");
-const adminModal = document.getElementById("adminModal");
-const adminCloseBtn = document.getElementById("adminCloseBtn");
-const adminLoginBtn = document.getElementById("adminLoginBtn");
-const adminEmailInput = document.getElementById("adminEmail");
-const adminPasswordInput = document.getElementById("adminPassword");
-const adminLoginError = document.getElementById("adminLoginError");
+const addUserForm = byId("addUserForm");
+const newUserEmail = byId("newUserEmail");
+const newUserRole = byId("newUserRole");
+const newUserTest = byId("newUserTest");
 
-const addUserForm = document.getElementById("addUserForm");
-const newUserEmail = document.getElementById("newUserEmail");
-const newUserRole = document.getElementById("newUserRole");
-const newUserPasswordWrap = document.getElementById("newUserPasswordWrap");
-const newUserPassword = document.getElementById("newUserPassword");
+const testForm = byId("testForm");
+const testIdInput = byId("testId");
+const testTitle = byId("testTitle");
+const testSubtitle = byId("testSubtitle");
+const testAudioSelect = byId("testAudioSelect");
+const sourceMediaSelect = byId("sourceMediaSelect");
+const testInstructionsEditor = byId("testInstructionsEditor");
+const testPrepEditor = byId("testPrepEditor");
+const newTestBtn = byId("newTestBtn");
 
+const mediaUploadForm = byId("mediaUploadForm");
+const mediaLabel = byId("mediaLabel");
+const mediaUsage = byId("mediaUsage");
+const mediaFile = byId("mediaFile");
+const mediaHelp = byId("mediaHelp");
+
+let appConfig = {
+  google_client_id: "",
+  google_required_domain: "3playmedia.com",
+  test_audio_max_mb: 50,
+  source_media_max_mb: 500,
+  allowed_test_audio: ["mp3", "wav", "m4a", "aac"],
+  allowed_source_media: ["mp3", "wav", "m4a", "aac", "mp4", "mov", "webm"],
+};
+let currentUser = null;
+let currentTest = null;
+let sessionId = null;
+let adminTests = [];
+let adminMedia = [];
 let countdownInterval = null;
+let googleRenderAttempted = false;
 
-// ------- Helpers -------
+const pageLoadMs = Date.now();
+let firstFocusMs = null;
+let focusedMs = 0;
+let focusStartMs = null;
+let tabHiddenCount = 0;
+let audioTestedBeforeStart = false;
+let audioTestCount = 0;
+let copyCountBeforeStart = 0;
+let startClickedMs = null;
+
+function makeClientSessionId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return (
+    "cs_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16)
+  );
+}
+const clientSessionId = makeClientSessionId();
+
 async function postJSON(url, payload) {
   const res = await fetch(url, {
     method: "POST",
@@ -63,13 +121,28 @@ async function postJSON(url, payload) {
     credentials: "same-origin",
     body: JSON.stringify(payload),
   });
-
-  // handle non-JSON errors cleanly
   const text = await res.text();
   try {
-    const data = JSON.parse(text);
-    return { ok: res.ok, status: res.status, data };
-  } catch (e) {
+    return { ok: res.ok, status: res.status, data: JSON.parse(text) };
+  } catch {
+    return {
+      ok: false,
+      status: res.status,
+      data: { error: "Non-JSON response", raw: text },
+    };
+  }
+}
+
+async function postForm(url, formData) {
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    body: formData,
+  });
+  const text = await res.text();
+  try {
+    return { ok: res.ok, status: res.status, data: JSON.parse(text) };
+  } catch {
     return {
       ok: false,
       status: res.status,
@@ -82,17 +155,37 @@ function toLowerEmail(value) {
   return (value || "").trim().toLowerCase();
 }
 
+function isGoogleDomainEmail(email) {
+  return toLowerEmail(email).endsWith(`@${appConfig.google_required_domain}`);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function fmtTs(ts) {
   if (!ts) return "";
-  // Expect server returns "YYYY-MM-DD HH:MM:SS" or ISO; Date can parse ISO more reliably.
-  const d = new Date(ts.replace(" ", "T") + (ts.includes("Z") ? "" : ""));
+  const d = new Date(String(ts).replace(" ", "T"));
   if (Number.isNaN(d.getTime())) return ts;
   return d.toLocaleString();
 }
 
 function seconds(ms) {
   if (!ms && ms !== 0) return "";
-  return Math.round(ms / 1000);
+  return Math.round(Number(ms) / 1000);
+}
+
+function fmtBytes(bytes) {
+  const n = Number(bytes || 0);
+  if (n >= 1073741824) return `${(n / 1073741824).toFixed(1)} GB`;
+  if (n >= 1048576) return `${(n / 1048576).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
 }
 
 function badgeYesNo(val) {
@@ -109,104 +202,10 @@ function fmtTime(sec) {
   return `${m}:${r}`;
 }
 
-function startAssessmentBars() {
-  assessmentBars.forEach((bar) => bar.classList.add("playing"));
+function setMessage(el, text, ok = false) {
+  el.textContent = text || "";
+  el.classList.toggle("ok", ok);
 }
-
-function stopAssessmentBars() {
-  assessmentBars.forEach((bar) => {
-    bar.classList.remove("playing");
-    bar.style.height = "6px";
-  });
-}
-
-// ------- Countdown beep (soft audio cue) -------
-let beepCtx = null;
-
-function getBeepCtx() {
-  if (!beepCtx) {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    beepCtx = new Ctx();
-  }
-  return beepCtx;
-}
-
-async function beepOnce(freq = 740, durationSec = 0.06, volume = 0.03) {
-  try {
-    const ctx = getBeepCtx();
-    if (ctx.state === "suspended") await ctx.resume();
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "triangle";
-    osc.frequency.value = freq;
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    const t = ctx.currentTime;
-
-    // quick fade in/out to avoid clicks
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(volume, t + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + durationSec);
-
-    osc.start(t);
-    osc.stop(t + durationSec + 0.02);
-  } catch {
-    // ignore (some environments block audio context)
-  }
-}
-
-function primeBeepAudio() {
-  try {
-    const ctx = getBeepCtx();
-
-    // Kick the context into "running" state on a real user gesture
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
-
-    // Some setups need an actual node to start/stop once to fully unlock audio output
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    gain.gain.value = 0; // silent
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.01);
-  } catch {
-    // ignore
-  }
-}
-
-// ------- Email gate + metrics state -------
-let username = "";
-let sessionId = null;
-
-const pageLoadMs = Date.now();
-let firstFocusMs = null;
-
-let focusedMs = 0;
-let focusStartMs = null;
-let tabHiddenCount = 0;
-
-let audioTestedBeforeStart = false;
-let audioTestCount = 0;
-let copyCountBeforeStart = 0;
-
-let startClickedMs = null;
-let countdownCancelled = false;
-
-// Unique client session id
-function makeClientSessionId() {
-  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-  return (
-    "cs_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16)
-  );
-}
-const clientSessionId = makeClientSessionId();
 
 function pageIsActive() {
   return document.visibilityState === "visible" && document.hasFocus();
@@ -214,12 +213,9 @@ function pageIsActive() {
 
 function updateFocusTracking() {
   const active = pageIsActive();
-
   if (active && firstFocusMs === null) firstFocusMs = Date.now() - pageLoadMs;
 
-  // only track pre-start focus time
   if (startClickedMs !== null) {
-    // once started, stop tracking for pre-start
     if (focusStartMs !== null) {
       focusedMs += Date.now() - focusStartMs;
       focusStartMs = null;
@@ -238,25 +234,68 @@ function updateFocusTracking() {
 window.addEventListener("focus", updateFocusTracking);
 window.addEventListener("blur", updateFocusTracking);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden" && startClickedMs === null)
+  if (document.visibilityState === "hidden" && startClickedMs === null) {
     tabHiddenCount += 1;
+  }
   updateFocusTracking();
 });
-
-// Track copy attempts (pre-start)
 document.addEventListener("copy", () => {
   if (startClickedMs === null) copyCountBeforeStart += 1;
 });
 
-// Disable context menu + some devtools shortcuts (best-effort, not security)
+let beepCtx = null;
+function getBeepCtx() {
+  if (!beepCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    beepCtx = new Ctx();
+  }
+  return beepCtx;
+}
 
-// ------- Audio visualizer -------
+async function beepOnce(freq = 740, durationSec = 0.06, volume = 0.03) {
+  try {
+    const ctx = getBeepCtx();
+    if (ctx.state === "suspended") await ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(volume, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + durationSec);
+    osc.start(t);
+    osc.stop(t + durationSec + 0.02);
+  } catch {
+    // Some browsers block audio contexts until a gesture. The countdown still works.
+  }
+}
+
+function primeBeepAudio() {
+  try {
+    const ctx = getBeepCtx();
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.01);
+  } catch {
+    // Ignore audio unlock failures.
+  }
+}
+
 function startBars() {
   bars.forEach((bar) => {
     bar.classList.add("playing");
     bar.style.height = "";
   });
 }
+
 function stopBars() {
   bars.forEach((bar) => {
     bar.classList.remove("playing");
@@ -267,135 +306,20 @@ function stopBars() {
   });
 }
 
-testAudioBtn.addEventListener("click", () => {
-  if (testAudio.paused) {
-    testAudio.play();
-    testAudioBtn.textContent = "Stop Audio";
-    startBars();
-
-    // Track audio test pre-start
-    if (startClickedMs === null) {
-      audioTestedBeforeStart = true;
-      audioTestCount += 1;
-    }
-  } else {
-    testAudio.pause();
-    testAudio.currentTime = 0;
-    testAudioBtn.textContent = "Test Audio";
-    stopBars();
-  }
-});
-testAudio.addEventListener("ended", () => {
-  testAudioBtn.textContent = "Test Audio";
-  stopBars();
-});
-
-// ------- Email "Started" notification (keeps your original behavior) -------
-function sendFeedbackStartedEmail() {
-  const data = { feedback: emailInput.value };
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "feedback.php", true);
-  xhr.setRequestHeader("Content-Type", "application/json");
-  xhr.send(JSON.stringify(data));
+function startAssessmentBars() {
+  assessmentBars.forEach((bar) => bar.classList.add("playing"));
 }
 
-// ------- Video play lockdown -------
-function playAssessmentAudio() {
-  videoSection.classList.remove("hidden");
-
-  // hard-disable controls
-  assessmentAudio.controls = false;
-  assessmentAudio.currentTime = 0;
-
-  // Start playback
-  assessmentAudio.play().catch(() => {
-    // If autoplay is blocked for any reason, show message (rare after user click)
-    const lbl = document.getElementById("playerLabel");
-    if (lbl) lbl.textContent = "Click Start again to begin audio…";
+function stopAssessmentBars() {
+  assessmentBars.forEach((bar) => {
+    bar.classList.remove("playing");
+    bar.style.height = "6px";
   });
-
-  startAssessmentBars();
-
-  // Prevent pausing / seeking (best-effort; not “security”)
-  assessmentAudio.addEventListener("pause", () => {
-    if (!assessmentAudio.ended) assessmentAudio.play();
-  });
-
-  assessmentAudio.addEventListener("seeking", () => {
-    // snap back if user tries to seek
-    if (assessmentAudio.currentTime > 0.01) assessmentAudio.currentTime = 0;
-  });
-
-  // Progress + timecode updates
-  const updateProgress = () => {
-    const dur = assessmentAudio.duration;
-    const cur = assessmentAudio.currentTime;
-
-    if (Number.isFinite(dur) && dur > 0) {
-      const pct = Math.max(0, Math.min(1, cur / dur)) * 100;
-      progressFill.style.width = pct.toFixed(2) + "%";
-      timeCurrent.textContent = fmtTime(cur);
-      timeTotal.textContent = fmtTime(dur);
-    } else {
-      // duration not yet known
-      timeCurrent.textContent = fmtTime(cur);
-      timeTotal.textContent = "--:--";
-    }
-  };
-
-  assessmentAudio.addEventListener("timeupdate", updateProgress);
-  assessmentAudio.addEventListener("loadedmetadata", updateProgress);
-  assessmentAudio.addEventListener("durationchange", updateProgress);
-
-  assessmentAudio.addEventListener("ended", async () => {
-    stopAssessmentBars();
-    progressFill.style.width = "100%";
-    alert("Assessment audio has ended.");
-    if (sessionId) {
-      await postJSON(API_METRICS, {
-        action: "video_ended",
-        session_id: sessionId,
-      });
-    }
-  });
-}
-
-// ------- Core Assessment Flow -------
-async function ensureSessionAndGate(email) {
-  const gate = await postJSON(API_AUTH, { action: "gate", email });
-
-  if (!gate.ok || !gate.data || !gate.data.ok) {
-    const msg =
-      (gate.data && (gate.data.message || gate.data.error)) ||
-      "Email not recognized.";
-    return { ok: false, message: msg };
-  }
-
-  // Create a session row (one per page load + user)
-  const startPayload = {
-    action: "session_start",
-    client_session_id: clientSessionId,
-    user_agent: navigator.userAgent,
-    first_focus_ms: firstFocusMs,
-  };
-
-  const s = await postJSON(API_METRICS, startPayload);
-  if (!s.ok || !s.data || !s.data.ok) {
-    const msg =
-      (s.data && (s.data.message || s.data.error)) ||
-      "Failed to start session logging.";
-    return { ok: false, message: msg };
-  }
-
-  sessionId = s.data.session_id;
-  return { ok: true, role: gate.data.role };
 }
 
 function computePrestartMetrics() {
-  // finalize pre-start focus time
   const focusMsNow = focusedMs + (focusStartMs ? Date.now() - focusStartMs : 0);
   const wallMsNow = Date.now() - pageLoadMs;
-
   return {
     focus_ms_before_start: Math.max(0, Math.round(focusMsNow)),
     wall_ms_before_start: Math.max(0, Math.round(wallMsNow)),
@@ -409,7 +333,6 @@ function computePrestartMetrics() {
 async function updatePrestartOnServer(extra = {}) {
   if (!sessionId) return;
   const m = computePrestartMetrics();
-
   await postJSON(API_METRICS, {
     action: "prestart_update",
     session_id: sessionId,
@@ -418,60 +341,351 @@ async function updatePrestartOnServer(extra = {}) {
   });
 }
 
-startBtn.addEventListener("click", async () => {
-  const email = toLowerEmail(emailInput.value);
-  username = email;
+function showLogin() {
+  loginGate.classList.remove("hidden");
+  unassignedSection.classList.add("hidden");
+  assessmentApp.classList.add("hidden");
+  adminDashboard.classList.add("hidden");
+  sessionTools.classList.add("hidden");
+}
 
-  if (!email.endsWith("@3playmedia.com")) {
-    errorMessage.textContent = "Please enter your @3playmedia.com email.";
+function resetAssessmentState() {
+  clearInterval(countdownInterval);
+  countdownInterval = null;
+  testAudio.pause();
+  [assessmentAudio, assessmentVideo].forEach((media) => {
+    media.onpause = null;
+    media.onseeking = null;
+    media.ontimeupdate = null;
+    media.onloadedmetadata = null;
+    media.ondurationchange = null;
+    media.onended = null;
+    media.pause();
+    try {
+      media.currentTime = 0;
+    } catch {
+      // Media may not be seekable before metadata loads.
+    }
+  });
+  sessionId = null;
+  focusedMs = 0;
+  focusStartMs = null;
+  tabHiddenCount = 0;
+  audioTestedBeforeStart = false;
+  audioTestCount = 0;
+  copyCountBeforeStart = 0;
+  startClickedMs = null;
+  countdownSection.classList.add("hidden");
+  videoSection.classList.add("hidden");
+  byId("form-section").classList.remove("hidden");
+  startBtn.disabled = false;
+  progressFill.style.width = "0%";
+  timeCurrent.textContent = "0:00";
+  timeTotal.textContent = "--:--";
+  stopBars();
+  stopAssessmentBars();
+}
+
+function renderCurrentTest(test) {
+  currentTest = test;
+  document.title = test.title || "Captioner NER Testing";
+  siteTitle.textContent = test.title || "Captioner NER Testing";
+  siteSubtitle.textContent = test.subtitle || "Internal assessment";
+  instructionsContent.innerHTML = test.instructions_html || "";
+  prepContent.innerHTML = test.prep_html || "";
+
+  testAudio.src = test.test_audio_url || "";
+  testAudio.load();
+  testAudioBtn.disabled = !test.test_audio_url;
+
+  assessmentAudio.removeAttribute("src");
+  assessmentVideo.removeAttribute("src");
+  assessmentAudio.load();
+  assessmentVideo.load();
+
+  if (test.source_media_kind === "video") {
+    assessmentVideo.src = test.source_media_url || "";
+    assessmentVideo.classList.remove("hidden");
+    assessmentVisualizer.classList.add("hidden");
+    playerLabel.textContent = "Playing assessment video...";
+  } else {
+    assessmentAudio.src = test.source_media_url || "";
+    assessmentVideo.classList.add("hidden");
+    assessmentVisualizer.classList.remove("hidden");
+    playerLabel.textContent = "Playing assessment audio...";
+  }
+
+  assessmentApp.classList.remove("hidden");
+  unassignedSection.classList.add("hidden");
+}
+
+function currentAssessmentMedia() {
+  return currentTest && currentTest.source_media_kind === "video"
+    ? assessmentVideo
+    : assessmentAudio;
+}
+
+async function startMetricsSession() {
+  if (!currentTest || sessionId) return;
+  const r = await postJSON(API_METRICS, {
+    action: "session_start",
+    client_session_id: clientSessionId,
+    user_agent: navigator.userAgent,
+    viewport_w: window.innerWidth,
+    viewport_h: window.innerHeight,
+    first_focus_ms: firstFocusMs,
+  });
+  if (r.ok && r.data && r.data.ok) {
+    sessionId = r.data.session_id;
+  } else {
+    setMessage(
+      errorMessage,
+      (r.data && (r.data.message || r.data.error)) ||
+        "Failed to start session logging.",
+    );
+  }
+}
+
+function applyAuthenticatedState(payload) {
+  currentUser = payload.user;
+  currentTest = payload.test || null;
+  loginGate.classList.add("hidden");
+  sessionTools.classList.remove("hidden");
+  sessionEmail.textContent = currentUser.email;
+
+  if (currentTest) {
+    resetAssessmentState();
+    renderCurrentTest(currentTest);
+    startMetricsSession();
+  } else {
+    assessmentApp.classList.add("hidden");
+    unassignedSection.classList.remove("hidden");
+  }
+
+  if (currentUser.role === "admin") {
+    showAdminDashboard();
+  } else {
+    adminDashboard.classList.add("hidden");
+  }
+}
+
+async function emailLogin() {
+  const email = toLowerEmail(loginEmail.value);
+  setMessage(loginMessage, "");
+  if (!email) {
+    setMessage(loginMessage, "Enter your email address.");
     return;
   }
+
+  if (isGoogleDomainEmail(email)) {
+    googleSignInArea.classList.remove("hidden");
+    renderGoogleButton();
+    setMessage(
+      loginMessage,
+      appConfig.google_client_id
+        ? `Use Google Sign-In for @${appConfig.google_required_domain} accounts.`
+        : "Google Sign-In is required but the client ID is not configured yet.",
+    );
+    return;
+  }
+
+  emailLoginBtn.disabled = true;
+  const r = await postJSON(API_AUTH, { action: "email_login", email });
+  emailLoginBtn.disabled = false;
+  if (!r.ok || !r.data || !r.data.ok) {
+    setMessage(
+      loginMessage,
+      (r.data && (r.data.message || r.data.error)) || "Access denied.",
+    );
+    return;
+  }
+  applyAuthenticatedState(r.data);
+}
+
+async function googleLogin(credential) {
+  setMessage(loginMessage, "Checking Google account...", true);
+  const r = await postJSON(API_AUTH, {
+    action: "google_login",
+    credential,
+  });
+  if (!r.ok || !r.data || !r.data.ok) {
+    setMessage(
+      loginMessage,
+      (r.data && (r.data.message || r.data.error)) || "Google login failed.",
+    );
+    return;
+  }
+  setMessage(loginMessage, "");
+  applyAuthenticatedState(r.data);
+}
+
+window.handleGoogleCredential = (response) => {
+  if (response && response.credential) googleLogin(response.credential);
+};
+
+function renderGoogleButton() {
+  if (!appConfig.google_client_id || googleRenderAttempted) return;
+  if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+    window.setTimeout(renderGoogleButton, 250);
+    return;
+  }
+  googleRenderAttempted = true;
+  googleSignInArea.classList.remove("hidden");
+  window.google.accounts.id.initialize({
+    client_id: appConfig.google_client_id,
+    callback: window.handleGoogleCredential,
+    hosted_domain: appConfig.google_required_domain,
+  });
+  window.google.accounts.id.renderButton(googleButton, {
+    theme: "outline",
+    size: "large",
+    type: "standard",
+    text: "continue_with",
+    shape: "rectangular",
+    width: 320,
+  });
+}
+
+async function loadConfig() {
+  const r = await postJSON(API_AUTH, { action: "config" });
+  if (r.ok && r.data && r.data.ok) {
+    appConfig = { ...appConfig, ...r.data };
+    mediaHelp.textContent = `Test audio: ${appConfig.allowed_test_audio.join(", ")} up to ${appConfig.test_audio_max_mb} MB. Source media: ${appConfig.allowed_source_media.join(", ")} up to ${appConfig.source_media_max_mb} MB.`;
+    renderGoogleButton();
+  }
+}
+
+testAudioBtn.addEventListener("click", async () => {
+  if (!testAudio.src) return;
+  if (testAudio.paused) {
+    await testAudio.play();
+    testAudioBtn.textContent = "Stop Audio";
+    startBars();
+    if (startClickedMs === null) {
+      audioTestedBeforeStart = true;
+      audioTestCount += 1;
+      if (sessionId) {
+        postJSON(API_METRICS, {
+          action: "audio_tested",
+          session_id: sessionId,
+        });
+      }
+    }
+  } else {
+    testAudio.pause();
+    testAudio.currentTime = 0;
+    testAudioBtn.textContent = "Test Audio";
+    stopBars();
+  }
+});
+
+testAudio.addEventListener("ended", () => {
+  testAudioBtn.textContent = "Test Audio";
+  stopBars();
+});
+
+function sendFeedbackStartedEmail() {
+  if (!currentUser || !currentUser.email) return;
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "feedback.php", true);
+  xhr.setRequestHeader("Content-Type", "application/json");
+  xhr.send(JSON.stringify({ feedback: currentUser.email }));
+}
+
+function playAssessmentMedia() {
+  const media = currentAssessmentMedia();
+  if (!media || !media.src) {
+    setMessage(errorMessage, "No assessment source media is assigned.");
+    return;
+  }
+
+  videoSection.classList.remove("hidden");
+  media.controls = false;
+  media.currentTime = 0;
+
+  let lastAllowedTime = 0;
+  const updateProgress = () => {
+    const dur = media.duration;
+    const cur = media.currentTime;
+    lastAllowedTime = Math.max(lastAllowedTime, cur);
+    if (Number.isFinite(dur) && dur > 0) {
+      const pct = Math.max(0, Math.min(1, cur / dur)) * 100;
+      progressFill.style.width = pct.toFixed(2) + "%";
+      timeCurrent.textContent = fmtTime(cur);
+      timeTotal.textContent = fmtTime(dur);
+    } else {
+      timeCurrent.textContent = fmtTime(cur);
+      timeTotal.textContent = "--:--";
+    }
+  };
+
+  media.onpause = () => {
+    if (!media.ended) media.play().catch(() => {});
+  };
+  media.onseeking = () => {
+    if (!media.ended && Math.abs(media.currentTime - lastAllowedTime) > 1) {
+      media.currentTime = lastAllowedTime;
+    }
+  };
+  media.ontimeupdate = updateProgress;
+  media.onloadedmetadata = updateProgress;
+  media.ondurationchange = updateProgress;
+  media.onended = async () => {
+    stopAssessmentBars();
+    progressFill.style.width = "100%";
+    alert("Assessment media has ended.");
+    if (sessionId) {
+      await postJSON(API_METRICS, {
+        action: "video_ended",
+        session_id: sessionId,
+      });
+    }
+  };
+
+  media.play().catch(() => {
+    playerLabel.textContent = "Click Start Assessment again to begin media...";
+  });
+  if (currentTest && currentTest.source_media_kind !== "video") {
+    startAssessmentBars();
+  }
+}
+
+startBtn.addEventListener("click", async () => {
+  if (!currentTest) return;
+  if (!sessionId) await startMetricsSession();
+  if (!sessionId) return;
 
   startBtn.disabled = true;
-  errorMessage.textContent = "";
-
+  setMessage(errorMessage, "");
   primeBeepAudio();
-
   updateFocusTracking();
 
-  const gateRes = await ensureSessionAndGate(email);
-
-  if (!gateRes.ok) {
-    startBtn.disabled = false;
-    errorMessage.textContent = gateRes.message;
-    return;
-  }
-
-  // Record the moment they hit Start (admin dashboard shows this)
   startClickedMs = Date.now();
   await updatePrestartOnServer({
     start_clicked_client_ms: startClickedMs,
     countdown_cancelled: 0,
   });
 
-  // UI transitions
-  document.getElementById("form-section").classList.add("hidden");
+  byId("form-section").classList.add("hidden");
   countdownSection.classList.remove("hidden");
-
   testAudio.pause();
+  stopBars();
+  testAudioBtn.textContent = "Test Audio";
 
   let countdown = 10;
   countdownSpan.textContent = countdown;
-
-  // beep immediately on "10"
   beepOnce(740, 0.08, 0.08);
 
   countdownInterval = setInterval(async () => {
     countdown -= 1;
     countdownSpan.textContent = countdown;
-
     if (countdown > 0) beepOnce(740, 0.08, 0.08);
     else beepOnce(880, 0.08, 0.03);
 
     if (countdown <= 0) {
       clearInterval(countdownInterval);
       countdownSection.classList.add("hidden");
-      playAssessmentAudio();
+      playAssessmentMedia();
       await postJSON(API_METRICS, {
         action: "video_started",
         session_id: sessionId,
@@ -484,231 +698,233 @@ startBtn.addEventListener("click", async () => {
 cancelCountdownBtn.addEventListener("click", async () => {
   clearInterval(countdownInterval);
   countdownSection.classList.add("hidden");
-  document.getElementById("form-section").classList.remove("hidden");
-
-  countdownCancelled = true;
+  byId("form-section").classList.remove("hidden");
   startBtn.disabled = false;
-
   await updatePrestartOnServer({ countdown_cancelled: 1 });
+  startClickedMs = null;
 });
 
-// ------- Admin UI -------
-function openAdminModal() {
-  adminLoginError.textContent = "";
-  adminOverlay.classList.remove("hidden");
-  adminModal.classList.remove("hidden");
-  adminModal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
-  adminEmailInput.value = "";
-  adminPasswordInput.value = "";
-  window.requestAnimationFrame(() => adminEmailInput.focus());
-}
-
-function closeAdminModal({ restoreFocus = true } = {}) {
-  adminOverlay.classList.add("hidden");
-  adminModal.classList.add("hidden");
-  adminOverlay.setAttribute("aria-hidden", "true");
-  adminModal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
-  if (restoreFocus) adminOpenBtn.focus();
-}
-
-adminOpenBtn.addEventListener("click", openAdminModal);
-adminCloseBtn.addEventListener("click", closeAdminModal);
-adminOverlay.addEventListener("click", closeAdminModal);
-
-[adminEmailInput, adminPasswordInput].forEach((input) => {
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      adminLogin();
-    }
-  });
-});
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !adminModal.classList.contains("hidden")) {
-    closeAdminModal();
-  }
-});
-
-async function adminWhoAmI() {
-  const r = await postJSON(API_AUTH, { action: "whoami" });
-  if (r.ok && r.data && r.data.ok && r.data.role === "admin") return true;
-  return false;
-}
-
-async function adminLogin() {
-  if (adminLoginBtn.disabled) return false;
-
-  adminLoginBtn.disabled = true;
-  adminLoginError.textContent = "";
-
-  const email = toLowerEmail(adminEmailInput.value);
-  const password = adminPasswordInput.value || "";
-
-  const r = await postJSON(API_AUTH, {
-    action: "admin_login",
-    email,
-    password,
-  });
-
-  adminLoginBtn.disabled = false;
-
-  if (!r.ok || !r.data || !r.data.ok) {
-    adminLoginError.textContent =
-      (r.data && (r.data.message || r.data.error)) || "Login failed.";
-    return false;
-  }
-
-  closeAdminModal({ restoreFocus: false });
-  showAdminDashboard();
-  return true;
-}
-
-adminLoginBtn.addEventListener("click", adminLogin);
-
-adminLogoutBtn.addEventListener("click", async () => {
+logoutBtn.addEventListener("click", async () => {
   await postJSON(API_AUTH, { action: "logout" });
-  adminDashboard.classList.add("hidden");
+  currentUser = null;
+  currentTest = null;
+  resetAssessmentState();
+  showLogin();
 });
 
-function showAdminDashboard() {
+emailLoginBtn.addEventListener("click", emailLogin);
+loginEmail.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    emailLogin();
+  }
+});
+
+function activeAdminTabId() {
+  return document.querySelector(".tabbtn.active")?.getAttribute("data-tab") || "metricsTab";
+}
+
+function showAdminTab(tabId) {
+  [metricsTab, activityTab, usersTab, testsTab, mediaTab].forEach((tab) => {
+    tab.classList.toggle("hidden", tab.id !== tabId);
+  });
+  tabButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-tab") === tabId);
+  });
+}
+
+async function showAdminDashboard() {
   adminDashboard.classList.remove("hidden");
-  loadMetrics();
-  loadUsers();
-  adminDashboard.scrollIntoView({ behavior: "smooth", block: "start" });
+  await loadAdminReferenceData();
+  await refreshActiveAdminTab();
+}
+
+async function refreshActiveAdminTab() {
+  const tab = activeAdminTabId();
+  if (tab === "metricsTab") await loadMetrics();
+  if (tab === "activityTab") await loadActivity();
+  if (tab === "usersTab") await loadUsers();
+  if (tab === "testsTab") renderTestsTable();
+  if (tab === "mediaTab") renderMediaTable();
 }
 
 tabButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    tabButtons.forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-
-    const tab = btn.getAttribute("data-tab");
-    if (tab === "metricsTab") {
-      metricsTab.classList.remove("hidden");
-      usersTab.classList.add("hidden");
-      loadMetrics();
-    } else {
-      usersTab.classList.remove("hidden");
-      metricsTab.classList.add("hidden");
-      loadUsers();
-    }
+  btn.addEventListener("click", async () => {
+    showAdminTab(btn.getAttribute("data-tab"));
+    await refreshActiveAdminTab();
   });
 });
 
-adminRefreshBtn.addEventListener("click", () => {
-  // refresh whichever tab is visible
-  if (!metricsTab.classList.contains("hidden")) loadMetrics();
-  if (!usersTab.classList.contains("hidden")) loadUsers();
+adminRefreshBtn.addEventListener("click", async () => {
+  await loadAdminReferenceData();
+  await refreshActiveAdminTab();
 });
 
-// Users: show/hide password field based on role
-newUserRole.addEventListener("change", () => {
-  const role = newUserRole.value;
-  if (role === "admin") newUserPasswordWrap.classList.remove("hidden");
-  else newUserPasswordWrap.classList.add("hidden");
-});
+metricsTestFilter.addEventListener("change", loadMetrics);
+activityTestFilter.addEventListener("change", loadActivity);
+
+async function loadAdminReferenceData() {
+  const [testsRes, mediaRes] = await Promise.all([
+    postJSON(API_ADMIN, { action: "tests_list" }),
+    postJSON(API_ADMIN, { action: "media_list" }),
+  ]);
+  if (testsRes.ok && testsRes.data && testsRes.data.ok) {
+    adminTests = testsRes.data.tests || [];
+  }
+  if (mediaRes.ok && mediaRes.data && mediaRes.data.ok) {
+    adminMedia = mediaRes.data.media || [];
+  }
+  populateAllSelects();
+}
+
+function populateTestSelect(select, selected = "", includeAll = false) {
+  const value = String(selected || "");
+  const options = [];
+  if (includeAll) options.push(`<option value="0">All tests</option>`);
+  else options.push(`<option value="">Unassigned</option>`);
+  adminTests.forEach((test) => {
+    options.push(
+      `<option value="${test.id}" ${String(test.id) === value ? "selected" : ""}>${escapeHtml(test.title)}</option>`,
+    );
+  });
+  select.innerHTML = options.join("");
+}
+
+function populateMediaSelect(select, usageKind, selected = "") {
+  const value = String(selected || "");
+  const list = adminMedia.filter((m) => m.usage_kind === usageKind);
+  const options = [`<option value="">None selected</option>`];
+  list.forEach((media) => {
+    options.push(
+      `<option value="${media.id}" ${String(media.id) === value ? "selected" : ""}>${escapeHtml(media.label)}</option>`,
+    );
+  });
+  select.innerHTML = options.join("");
+}
+
+function populateAllSelects() {
+  populateTestSelect(metricsTestFilter, metricsTestFilter.value, true);
+  populateTestSelect(activityTestFilter, activityTestFilter.value, true);
+  populateTestSelect(newUserTest, newUserTest.value, false);
+  populateMediaSelect(testAudioSelect, "test_audio", testAudioSelect.value);
+  populateMediaSelect(sourceMediaSelect, "source", sourceMediaSelect.value);
+}
 
 async function loadMetrics() {
-  // 10 columns (includes Status)
-  metricsBody.innerHTML = `<tr><td colspan="10" class="subtle">Loading…</td></tr>`;
-
+  metricsBody.innerHTML = `<tr><td colspan="12" class="subtle">Loading...</td></tr>`;
   const r = await postJSON(API_ADMIN, {
     action: "metrics_users_rollup",
     limit: 2000,
+    test_id: Number(metricsTestFilter.value || 0),
   });
 
-  if (!r.ok || !r.data) {
-    metricsBody.innerHTML = `<tr><td colspan="10" style="color:#fecaca">Failed to load metrics (network).</td></tr>`;
+  if (!r.ok || !r.data || !r.data.ok) {
+    metricsBody.innerHTML = `<tr><td colspan="12" style="color:#fecaca">Failed to load metrics.</td></tr>`;
     return;
   }
-
-  if (!r.data.ok) {
-    const msg = r.data.message || r.data.error || "Failed to load metrics.";
-    metricsBody.innerHTML = `<tr><td colspan="10" style="color:#fecaca">${msg}</td></tr>`;
-    return;
-  }
-
   const rows = r.data.rows || [];
   if (!rows.length) {
-    metricsBody.innerHTML = `<tr><td colspan="10" class="subtle">No users found.</td></tr>`;
+    metricsBody.innerHTML = `<tr><td colspan="12" class="subtle">No metrics found.</td></tr>`;
     return;
   }
 
   metricsBody.innerHTML = rows
     .map((s) => {
       const hasSession = !!s.created_at;
-      const focusSec = hasSession
-        ? seconds(Number(s.focus_ms_before_start || 0))
-        : "";
-      const wallSec = hasSession
-        ? seconds(Number(s.wall_ms_before_start || 0))
-        : "";
-
       let status = "Not started";
       if (hasSession) status = "Loaded";
       if (s.start_clicked_at) status = "Started";
       if (s.video_started_at) status = "In progress";
-      if (s.video_ended_at) status = "Finished";
-      if (Number(s.countdown_cancelled) === 1) status = "Cancelled";
-
-      const statusBadge = `<span class="badge">${status}</span>`;
-
+      if (s.video_ended_at || s.completed_at) status = "Finished";
+      if (Number(s.countdown_cancelled) === 1 && !s.video_started_at) {
+        status = "Cancelled";
+      }
       return `
         <tr>
-          <td>${s.email || ""}</td>
-          <td>${statusBadge}</td>
+          <td>${escapeHtml(s.email)}</td>
+          <td>${escapeHtml(s.assigned_test_title || "Unassigned")}</td>
+          <td>${escapeHtml(s.session_test_title || "")}</td>
+          <td><span class="badge">${status}</span></td>
           <td>${fmtTs(s.created_at)}</td>
           <td>${fmtTs(s.start_clicked_at)}</td>
           <td>${badgeYesNo(s.audio_tested_before_start)}</td>
           <td>${s.copy_count_before_start || 0}</td>
-          <td>${focusSec}</td>
-          <td>${wallSec}</td>
+          <td>${hasSession ? seconds(s.focus_ms_before_start || 0) : ""}</td>
+          <td>${hasSession ? seconds(s.wall_ms_before_start || 0) : ""}</td>
           <td>${s.tab_hidden_count_before_start || 0}</td>
-          <td>${badgeYesNo(s.video_ended_at)}</td>
+          <td>${badgeYesNo(s.video_ended_at || s.completed_at)}</td>
         </tr>
       `;
     })
     .join("");
 }
 
-async function loadUsers() {
-  usersBody.innerHTML = `<tr><td colspan="5" class="subtle">Loading…</td></tr>`;
-
-  const r = await postJSON(API_ADMIN, { action: "users_list", limit: 500 });
-
+async function loadActivity() {
+  activityBody.innerHTML = `<tr><td colspan="4" class="subtle">Loading...</td></tr>`;
+  const r = await postJSON(API_ADMIN, {
+    action: "activity_list",
+    limit: 500,
+    test_id: Number(activityTestFilter.value || 0),
+  });
   if (!r.ok || !r.data || !r.data.ok) {
-    usersBody.innerHTML = `<tr><td colspan="5" style="color:#fecaca">Failed to load users.</td></tr>`;
+    activityBody.innerHTML = `<tr><td colspan="4" style="color:#fecaca">Failed to load activity.</td></tr>`;
     return;
   }
+  const events = r.data.events || [];
+  if (!events.length) {
+    activityBody.innerHTML = `<tr><td colspan="4" class="subtle">No activity found.</td></tr>`;
+    return;
+  }
+  activityBody.innerHTML = events
+    .map(
+      (event) => `
+        <tr>
+          <td>${fmtTs(event.created_at)}</td>
+          <td>${escapeHtml(event.user_email || "")}</td>
+          <td>${escapeHtml(event.test_title || "")}</td>
+          <td>${escapeHtml(event.event_label || event.event_type)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
 
+async function loadUsers() {
+  usersBody.innerHTML = `<tr><td colspan="7" class="subtle">Loading...</td></tr>`;
+  const r = await postJSON(API_ADMIN, { action: "users_list", limit: 2000 });
+  if (!r.ok || !r.data || !r.data.ok) {
+    usersBody.innerHTML = `<tr><td colspan="7" style="color:#fecaca">Failed to load users.</td></tr>`;
+    return;
+  }
   const users = r.data.users || [];
   if (!users.length) {
-    usersBody.innerHTML = `<tr><td colspan="5" class="subtle">No users found.</td></tr>`;
+    usersBody.innerHTML = `<tr><td colspan="7" class="subtle">No users found.</td></tr>`;
     return;
   }
 
   usersBody.innerHTML = users
     .map((u) => {
       const active = Number(u.is_active) === 1;
-      const statusBadge = `<span class="badge ${active ? "badge--ok" : "badge--no"}">${active ? "Active" : "Inactive"}</span>`;
-      const actionLabel = active ? "Delete" : "Restore";
-      const actionClass = active ? "btn--danger" : "btn--ghost";
-      const action = active ? "users_deactivate" : "users_reactivate";
-
       return `
-        <tr>
-          <td>${u.email}</td>
-          <td><span class="badge">${u.role}</span></td>
-          <td>${statusBadge}</td>
+        <tr data-userid="${u.id}">
+          <td>${escapeHtml(u.email)}</td>
+          <td>
+            <select class="table-select" data-field="role">
+              <option value="captioner" ${u.role === "captioner" ? "selected" : ""}>captioner</option>
+              <option value="admin" ${u.role === "admin" ? "selected" : ""}>admin</option>
+            </select>
+          </td>
+          <td>${testSelectMarkup(u.test_id, "test_id")}</td>
+          <td>
+            <select class="table-select" data-field="is_active">
+              <option value="1" ${active ? "selected" : ""}>Active</option>
+              <option value="0" ${!active ? "selected" : ""}>Inactive</option>
+            </select>
+          </td>
+          <td>${fmtTs(u.last_login_at)}</td>
           <td>${fmtTs(u.created_at)}</td>
           <td>
-            <button class="${actionClass} small" type="button"
-              data-action="${action}" data-userid="${u.id}" data-email="${u.email}">
-              ${actionLabel}
-            </button>
+            <button class="btn--primary small" type="button" data-action="save-user">Save</button>
           </td>
         </tr>
       `;
@@ -716,74 +932,256 @@ async function loadUsers() {
     .join("");
 }
 
-// User actions (delegated)
-usersBody.addEventListener("click", async (e) => {
-  const btn = e.target.closest("button[data-action]");
-  if (!btn) return;
-
-  const action = btn.getAttribute("data-action");
-  const userId = btn.getAttribute("data-userid");
-  const email = btn.getAttribute("data-email");
-
-  if (action === "users_deactivate") {
-    const ok = confirm(
-      `Deactivate (delete) access for:\n\n${email}\n\nHistorical metrics will remain.`,
+function testSelectMarkup(selected, field) {
+  const value = String(selected || "");
+  const options = [`<option value="">Unassigned</option>`];
+  adminTests.forEach((test) => {
+    options.push(
+      `<option value="${test.id}" ${String(test.id) === value ? "selected" : ""}>${escapeHtml(test.title)}</option>`,
     );
-    if (!ok) return;
-  }
+  });
+  return `<select class="table-select" data-field="${field}">${options.join("")}</select>`;
+}
 
+usersBody.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-action='save-user']");
+  if (!btn) return;
+  const tr = btn.closest("tr[data-userid]");
+  const userId = tr.getAttribute("data-userid");
+  const role = tr.querySelector("[data-field='role']").value;
+  const testId = tr.querySelector("[data-field='test_id']").value;
+  const isActive = tr.querySelector("[data-field='is_active']").value;
   btn.disabled = true;
-  const r = await postJSON(API_ADMIN, { action, user_id: userId });
+  const r = await postJSON(API_ADMIN, {
+    action: "users_update",
+    user_id: userId,
+    role,
+    test_id: testId,
+    is_active: Number(isActive),
+  });
   btn.disabled = false;
-
   if (!r.ok || !r.data || !r.data.ok) {
-    alert((r.data && (r.data.message || r.data.error)) || "Action failed.");
+    alert((r.data && (r.data.message || r.data.error)) || "User update failed.");
     return;
   }
-
-  loadUsers();
+  await loadUsers();
 });
 
 addUserForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const email = toLowerEmail(newUserEmail.value);
-  const role = (newUserRole.value || "captioner").trim();
-  const password = newUserPassword.value || "";
-
-  if (!email.endsWith("@3playmedia.com")) {
-    alert("Email must be a @3playmedia.com address.");
-    return;
-  }
-
-  if (role === "admin" && password.length < 8) {
-    alert("Admin password required (min 8 chars).");
-    return;
-  }
-
+  const role = newUserRole.value || "captioner";
+  const testId = newUserTest.value || "";
   const r = await postJSON(API_ADMIN, {
     action: "users_add",
     email,
     role,
-    password,
+    test_id: testId,
   });
-
   if (!r.ok || !r.data || !r.data.ok) {
-    alert(
-      (r.data && (r.data.message || r.data.error)) || "Failed to add user.",
-    );
+    alert((r.data && (r.data.message || r.data.error)) || "Failed to add user.");
+    return;
+  }
+  newUserEmail.value = "";
+  newUserRole.value = "captioner";
+  newUserTest.value = "";
+  await loadUsers();
+});
+
+function renderTestsTable() {
+  if (!adminTests.length) {
+    testsBody.innerHTML = `<tr><td colspan="6" class="subtle">No tests found.</td></tr>`;
+    return;
+  }
+  testsBody.innerHTML = adminTests
+    .map(
+      (test) => `
+        <tr>
+          <td>${escapeHtml(test.title)}</td>
+          <td>${escapeHtml(test.test_audio_label || "")}</td>
+          <td>${escapeHtml(test.source_media_label || "")}</td>
+          <td>${test.assigned_count || 0}</td>
+          <td>${fmtTs(test.updated_at || test.created_at)}</td>
+          <td>
+            <div class="table-actions">
+              <button class="btn--ghost small" type="button" data-action="edit-test" data-testid="${test.id}">Edit</button>
+              <button class="btn--danger small" type="button" data-action="delete-test" data-testid="${test.id}">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function clearTestForm() {
+  testIdInput.value = "";
+  testTitle.value = "";
+  testSubtitle.value = "";
+  testAudioSelect.value = "";
+  sourceMediaSelect.value = "";
+  testInstructionsEditor.innerHTML = "";
+  testPrepEditor.innerHTML = "";
+}
+
+newTestBtn.addEventListener("click", clearTestForm);
+
+testsBody.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-action]");
+  if (!btn) return;
+  const action = btn.getAttribute("data-action");
+  const id = Number(btn.getAttribute("data-testid"));
+  const test = adminTests.find((t) => Number(t.id) === id);
+  if (!test) return;
+
+  if (action === "edit-test") {
+    testIdInput.value = test.id;
+    testTitle.value = test.title || "";
+    testSubtitle.value = test.subtitle || "";
+    testAudioSelect.value = test.test_audio_media_id || "";
+    sourceMediaSelect.value = test.source_media_id || "";
+    testInstructionsEditor.innerHTML = test.instructions_html || "";
+    testPrepEditor.innerHTML = test.prep_html || "";
+    testForm.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
 
-  newUserEmail.value = "";
-  newUserPassword.value = "";
-  loadUsers();
+  if (action === "delete-test") {
+    if (!confirm(`Delete "${test.title}"?`)) return;
+    btn.disabled = true;
+    let r = await postJSON(API_ADMIN, {
+      action: "tests_delete",
+      test_id: id,
+    });
+    if (
+      r.status === 409 &&
+      r.data &&
+      r.data.requires_confirm &&
+      confirm(`${r.data.message}\n\nDelete anyway and set those users to unassigned?`)
+    ) {
+      r = await postJSON(API_ADMIN, {
+        action: "tests_delete",
+        test_id: id,
+        force: 1,
+      });
+    }
+    btn.disabled = false;
+    if (!r.ok || !r.data || !r.data.ok) {
+      alert((r.data && (r.data.message || r.data.error)) || "Delete failed.");
+      return;
+    }
+    await loadAdminReferenceData();
+    renderTestsTable();
+  }
 });
 
-// On load: if already admin session, show dashboard
+testForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = {
+    action: "tests_save",
+    test_id: testIdInput.value || 0,
+    title: testTitle.value,
+    subtitle: testSubtitle.value,
+    test_audio_media_id: testAudioSelect.value || null,
+    source_media_id: sourceMediaSelect.value || null,
+    instructions_html: testInstructionsEditor.innerHTML,
+    prep_html: testPrepEditor.innerHTML,
+  };
+  const r = await postJSON(API_ADMIN, payload);
+  if (!r.ok || !r.data || !r.data.ok) {
+    alert((r.data && (r.data.message || r.data.error)) || "Failed to save test.");
+    return;
+  }
+  clearTestForm();
+  await loadAdminReferenceData();
+  renderTestsTable();
+});
+
+document.querySelectorAll(".editor-toolbar button[data-command]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const toolbar = btn.closest(".editor-toolbar");
+    const editor = byId(toolbar.getAttribute("data-editor"));
+    editor.focus();
+    document.execCommand(btn.getAttribute("data-command"), false, null);
+  });
+});
+
+function renderMediaTable() {
+  if (!adminMedia.length) {
+    mediaBody.innerHTML = `<tr><td colspan="7" class="subtle">No media found.</td></tr>`;
+    return;
+  }
+  mediaBody.innerHTML = adminMedia
+    .map((media) => {
+      const canDelete = Number(media.is_builtin) !== 1;
+      return `
+        <tr>
+          <td>${escapeHtml(media.label)}</td>
+          <td>${media.usage_kind === "test_audio" ? "Test Audio" : "Source"}</td>
+          <td>${escapeHtml(media.media_kind)}</td>
+          <td>${fmtBytes(media.size_bytes)}</td>
+          <td class="mono-ish">${escapeHtml(media.file_path)}</td>
+          <td>${fmtTs(media.created_at)}</td>
+          <td>
+            ${
+              canDelete
+                ? `<button class="btn--danger small" type="button" data-action="delete-media" data-mediaid="${media.id}">Delete</button>`
+                : `<span class="badge">Built-in</span>`
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+mediaUploadForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!mediaFile.files || !mediaFile.files[0]) {
+    alert("Choose a media file to upload.");
+    return;
+  }
+  const formData = new FormData();
+  formData.append("action", "media_upload");
+  formData.append("label", mediaLabel.value);
+  formData.append("usage_kind", mediaUsage.value);
+  formData.append("media_file", mediaFile.files[0]);
+  const r = await postForm(API_ADMIN, formData);
+  if (!r.ok || !r.data || !r.data.ok) {
+    alert((r.data && (r.data.message || r.data.error)) || "Upload failed.");
+    return;
+  }
+  mediaLabel.value = "";
+  mediaFile.value = "";
+  await loadAdminReferenceData();
+  renderMediaTable();
+});
+
+mediaBody.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-action='delete-media']");
+  if (!btn) return;
+  if (!confirm("Delete this uploaded media file?")) return;
+  btn.disabled = true;
+  const r = await postJSON(API_ADMIN, {
+    action: "media_delete",
+    media_id: btn.getAttribute("data-mediaid"),
+  });
+  btn.disabled = false;
+  if (!r.ok || !r.data || !r.data.ok) {
+    alert((r.data && (r.data.message || r.data.error)) || "Delete failed.");
+    return;
+  }
+  await loadAdminReferenceData();
+  renderMediaTable();
+});
+
 (async function init() {
   updateFocusTracking();
-
-  const isAdmin = await adminWhoAmI();
-  if (isAdmin) showAdminDashboard();
+  await loadConfig();
+  const r = await postJSON(API_AUTH, { action: "whoami" });
+  if (r.ok && r.data && r.data.ok) {
+    applyAuthenticatedState(r.data);
+  } else {
+    showLogin();
+  }
 })();

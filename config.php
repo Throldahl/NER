@@ -8,3 +8,8 @@ define('DB_CHARSET', 'utf8mb4');
 
 define('SESSION_NAME', 'captionerner_session');
 define('DEFAULT_ASSESSMENT_SLUG', 'winter_ner_2026');
+
+// Google Identity Services OAuth client ID for 3Play Media sign-in.
+// This is not a client secret. Set this to the Hostinger site's web client ID.
+define('GOOGLE_CLIENT_ID', '');
+define('GOOGLE_AUTH_REQUIRED_DOMAIN', '3playmedia.com');

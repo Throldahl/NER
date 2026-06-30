@@ -1,16 +1,17 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <title>Winter 2026 Employee NER</title>
+    <title>Captioner NER Testing</title>
     <link rel="icon" type="image/png" href="favicon-32x32.svg" sizes="32x32" />
-    <link rel="stylesheet" href="style.css?v=2.14" />
+    <link rel="stylesheet" href="style.css?v=2.20" />
 
     <script
       src="https://code.jquery.com/jquery-3.7.1.js"
       integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4="
       crossorigin="anonymous"
     ></script>
-    <script defer src="script.js?v=2.14"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script defer src="script.js?v=2.20"></script>
 
     <meta name="robots" content="noindex" />
     <meta name="author" content="Derek Throldahl" />
@@ -27,330 +28,468 @@
     <header class="site-header">
       <div class="header-inner">
         <div>
-          <h1>Winter 2026 Employee NER</h1>
-          <div class="subtle">Captioner NER testing • internal</div>
+          <h1 id="siteTitle">Captioner NER Testing</h1>
+          <div id="siteSubtitle" class="subtle">Internal assessment access</div>
         </div>
-        <div class="btn-row" style="margin-top: 0">
-          <button id="adminOpenBtn" type="button" class="btn--ghost small">
-            Admin
+        <div id="sessionTools" class="session-tools hidden">
+          <span id="sessionEmail" class="subtle"></span>
+          <button id="logoutBtn" type="button" class="btn--ghost small">
+            Logout
           </button>
         </div>
       </div>
     </header>
 
-    <div id="info-sections">
-      <section id="instructions" class="card">
-        <p>
-          Please set up for a StreamText event. Prep is to the right with a
-          button below to test audio. When you are ready to begin, message the
-          coordinators on Slack and ask them to start your StreamText session.
-          Once you receive confirmation, you can continue.<br /><br />
-          Enter your 3Play Media email address and click Start Assessment to
-          begin. You will see a 10-second countdown, then the audio will
-          automatically play without the ability to pause or rewind.<br /><br />
-          Let the coordinators know when you finish. We will retrieve your
-          transcript from StreamText.
-        </p>
-      </section>
+    <main>
+      <section id="loginGate" class="auth-wrap">
+        <div class="card auth-card">
+          <h2>Access assessment</h2>
+          <p class="subtle">
+            Enter the email your coordinator added for this assessment.
+            3Play Media accounts must continue with Google Sign-In.
+          </p>
 
-      <section id="prep" class="card">
-        <p>
-          <b>IDs:</b><br />
-          &gt;&gt; Anastasia: (interviewer - will be the first speaker)<br />
-          &gt;&gt; Nick: (male interviewee)<br />
-          &gt;&gt; Sarah: (female interviewee)<br /><br />
-          <b>Description:</b><br />
-          Podcast interview with a cycling power-couple, talking about living
-          and training together.<br /><br />
-          <b>Terms:</b><br />
-          Coach Franck<br />
-          DTE<br />
-          Hugo Barrette<br />
-          keirin<br />
-          Kirsti Lay<br />
-          Megan Rapinoe<br />
-          omnium<br />
-          <i>NOTE:</i> There is a term from our nulled list used in this segment
-          (not in an offensive way, just as a description). Be prepared to write
-          it.
-        </p>
-      </section>
-    </div>
+          <label for="loginEmail">Email</label>
+          <input
+            type="email"
+            id="loginEmail"
+            placeholder="name@3playmedia.com"
+            autocomplete="email"
+            required
+          />
 
-    <div class="content-container">
-      <section id="form-section" class="card">
-        <div class="btn-row" style="margin-top: 0">
-          <button id="testAudioBtn" type="button" class="btn--ghost">
-            Test Audio
-          </button>
-          <div id="audioVisualizer" class="visualizer" aria-hidden="true">
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-          </div>
-        </div>
-
-        <label for="email">Email</label>
-        <input
-          type="email"
-          id="email"
-          placeholder="yourname@3playmedia.com"
-          required
-        />
-
-        <div class="btn-row">
-          <button id="startBtn" class="btn--primary" type="button">
-            Start Assessment
-          </button>
-        </div>
-
-        <p id="error-message"></p>
-      </section>
-
-      <audio id="testAudio" preload="auto">
-        <source src="test-audio.mp3" type="audio/mp3" />
-        Your browser does not support the audio tag.
-      </audio>
-
-      <section id="countdown-section" class="card hidden">
-        <p>
-          Assessment will begin in <span id="countdown">10</span> seconds...
-        </p>
-        <div class="btn-row">
-          <button id="cancelCountdownBtn" type="button" class="btn--danger">
-            Cancel
-          </button>
-        </div>
-      </section>
-
-      <section id="video-section" class="card hidden">
-        <div class="player-shell" aria-label="Assessment audio is playing">
-          <div class="player-top">
-            <div class="now-playing">
-              <span class="dot" aria-hidden="true"></span>
-              <span id="playerLabel">Playing assessment audio…</span>
-            </div>
-
-            <div class="timecode" aria-hidden="true">
-              <span id="timeCurrent">0:00</span>
-              <span class="sep">/</span>
-              <span id="timeTotal">--:--</span>
-            </div>
-          </div>
-
-          <div class="progress-outer" aria-hidden="true">
-            <div id="progressFill" class="progress-fill"></div>
-          </div>
-
-          <div
-            id="assessmentVisualizer"
-            class="visualizer visualizer--big"
-            aria-hidden="true"
-          >
-            <!-- reuse the same 20 bars pattern -->
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-          </div>
-
-          <!-- real media element (hidden controls) -->
-          <audio id="assessmentAudio" preload="auto">
-            <source src="NERAudio.mp3" type="audio/mp3" />
-            Your browser does not support the audio tag.
-          </audio>
-        </div>
-      </section>
-    </div>
-
-    <!-- Admin Dashboard (integrated; hidden unless admin logs in) -->
-    <section id="adminDashboard" class="admin-wrap hidden">
-      <div class="card">
-        <div class="admin-head">
-          <h2>Admin Dashboard</h2>
-          <div class="btn-row" style="margin-top: 0">
-            <button id="adminRefreshBtn" type="button" class="btn--ghost small">
-              Refresh
-            </button>
-            <button id="adminLogoutBtn" type="button" class="btn--danger small">
-              Logout
+          <div class="btn-row">
+            <button id="emailLoginBtn" class="btn--primary" type="button">
+              Continue
             </button>
           </div>
-        </div>
 
-        <div class="tabbar">
-          <button
-            class="tabbtn small active"
-            data-tab="metricsTab"
-            type="button"
-          >
-            Metrics
-          </button>
-          <button class="tabbtn small" data-tab="usersTab" type="button">
-            Users
-          </button>
-        </div>
-
-        <!-- Metrics Tab -->
-        <div id="metricsTab">
-          <div class="help">
-            Shows the most recent sessions. “Delete user” in the Users tab
-            deactivates access but keeps historical session data.
+          <div id="googleSignInArea" class="google-signin-area hidden">
+            <div class="divider"><span>or</span></div>
+            <div id="googleButton"></div>
           </div>
-          <div class="table-wrap" style="margin-top: 10px">
-            <table>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Status</th>
-                  <th>Page load</th>
-                  <th>Start clicked</th>
-                  <th>Audio tested</th>
-                  <th>Copy count</th>
-                  <th>Focus sec (pre-start)</th>
-                  <th>Wall sec (pre-start)</th>
-                  <th>Tab hides</th>
-                  <th>Completed</th>
-                </tr>
-              </thead>
-              <tbody id="metricsBody">
-                <tr>
-                  <td colspan="10" class="subtle">Loading…</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+
+          <p id="loginMessage"></p>
+        </div>
+      </section>
+
+      <section id="unassignedSection" class="content-container hidden">
+        <div class="card">
+          <h2>No Test Assigned</h2>
+          <p>
+            Your email is active, but no NER test content is currently assigned
+            to your account. Please contact your coordinator before starting.
+          </p>
+        </div>
+      </section>
+
+      <div id="assessmentApp" class="hidden">
+        <div id="info-sections">
+          <section id="instructions" class="card">
+            <h2>Instructions</h2>
+            <div id="instructionsContent" class="rich-content"></div>
+          </section>
+
+          <section id="prep" class="card">
+            <h2>Prep</h2>
+            <div id="prepContent" class="rich-content"></div>
+          </section>
         </div>
 
-        <!-- Users Tab -->
-        <div id="usersTab" class="hidden" style="margin-top: 14px">
-          <form id="addUserForm" class="admin-form" autocomplete="off">
-            <div>
-              <label for="newUserEmail">Email</label>
-              <input
-                id="newUserEmail"
-                type="email"
-                placeholder="name@3playmedia.com"
-                required
-              />
+        <div class="content-container">
+          <section id="form-section" class="card">
+            <div class="btn-row" style="margin-top: 0">
+              <button id="testAudioBtn" type="button" class="btn--ghost">
+                Test Audio
+              </button>
+              <div id="audioVisualizer" class="visualizer" aria-hidden="true">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+              </div>
             </div>
 
-            <div>
-              <label for="newUserRole">Role</label>
-              <select id="newUserRole">
-                <option value="captioner">captioner</option>
-                <option value="admin">admin</option>
-              </select>
-            </div>
-
-            <div id="newUserPasswordWrap" class="hidden">
-              <label for="newUserPassword">Admin password</label>
-              <input
-                id="newUserPassword"
-                type="password"
-                placeholder="required for admin"
-              />
-            </div>
-
-            <div>
-              <label>&nbsp;</label>
-              <button class="btn--primary" type="submit">
-                Add / Reactivate
+            <div class="btn-row">
+              <button id="startBtn" class="btn--primary" type="button">
+                Start Assessment
               </button>
             </div>
-          </form>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="usersBody">
-                <tr>
-                  <td colspan="5" class="subtle">No data loaded yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <p id="error-message"></p>
+          </section>
+
+          <audio id="testAudio" preload="auto"></audio>
+
+          <section id="countdown-section" class="card hidden">
+            <p>
+              Assessment will begin in <span id="countdown">10</span>
+              seconds...
+            </p>
+            <div class="btn-row">
+              <button id="cancelCountdownBtn" type="button" class="btn--danger">
+                Cancel
+              </button>
+            </div>
+          </section>
+
+          <section id="video-section" class="card hidden">
+            <div class="player-shell" aria-label="Assessment media is playing">
+              <div class="player-top">
+                <div class="now-playing">
+                  <span class="dot" aria-hidden="true"></span>
+                  <span id="playerLabel">Playing assessment media...</span>
+                </div>
+
+                <div class="timecode" aria-hidden="true">
+                  <span id="timeCurrent">0:00</span>
+                  <span class="sep">/</span>
+                  <span id="timeTotal">--:--</span>
+                </div>
+              </div>
+
+              <div class="progress-outer" aria-hidden="true">
+                <div id="progressFill" class="progress-fill"></div>
+              </div>
+
+              <video
+                id="assessmentVideo"
+                class="assessment-video hidden"
+                preload="auto"
+                playsinline
+                controlslist="nodownload noplaybackrate"
+              ></video>
+
+              <div
+                id="assessmentVisualizer"
+                class="visualizer visualizer--big"
+                aria-hidden="true"
+              >
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+              </div>
+
+              <audio id="assessmentAudio" preload="auto"></audio>
+            </div>
+          </section>
         </div>
       </div>
-    </section>
 
-    <!-- Admin Login Modal -->
-    <div id="adminOverlay" class="overlay hidden" aria-hidden="true"></div>
-    <div
-      id="adminModal"
-      class="modal hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="adminModalTitle"
-      aria-hidden="true"
-    >
-      <div class="modal-top">
-        <h3 id="adminModalTitle">Admin Login</h3>
-        <button
-          id="adminCloseBtn"
-          class="modal-close"
-          type="button"
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </div>
+      <section id="adminDashboard" class="admin-wrap hidden">
+        <div class="card">
+          <div class="admin-head">
+            <h2>Admin Dashboard</h2>
+            <div class="btn-row" style="margin-top: 0">
+              <button
+                id="adminRefreshBtn"
+                type="button"
+                class="btn--ghost small"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
 
-      <label for="adminEmail">Email</label>
-      <input type="email" id="adminEmail" placeholder="name@3playmedia.com" />
+          <div class="tabbar">
+            <button
+              class="tabbtn small active"
+              data-tab="metricsTab"
+              type="button"
+            >
+              Metrics
+            </button>
+            <button class="tabbtn small" data-tab="activityTab" type="button">
+              Activity
+            </button>
+            <button class="tabbtn small" data-tab="usersTab" type="button">
+              Users
+            </button>
+            <button class="tabbtn small" data-tab="testsTab" type="button">
+              Tests
+            </button>
+            <button class="tabbtn small" data-tab="mediaTab" type="button">
+              Media
+            </button>
+          </div>
 
-      <label for="adminPassword">Password</label>
-      <input type="password" id="adminPassword" placeholder="••••••••" />
+          <div id="metricsTab">
+            <div class="admin-filter-row">
+              <div>
+                <label for="metricsTestFilter">Test</label>
+                <select id="metricsTestFilter"></select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Assigned Test</th>
+                    <th>Session Test</th>
+                    <th>Status</th>
+                    <th>Page load</th>
+                    <th>Start clicked</th>
+                    <th>Audio tested</th>
+                    <th>Copy count</th>
+                    <th>Focus sec</th>
+                    <th>Wall sec</th>
+                    <th>Tab hides</th>
+                    <th>Completed</th>
+                  </tr>
+                </thead>
+                <tbody id="metricsBody">
+                  <tr>
+                    <td colspan="12" class="subtle">Loading...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      <div class="btn-row">
-        <button id="adminLoginBtn" type="button" class="btn--primary">
-          Login
-        </button>
-      </div>
+          <div id="activityTab" class="hidden">
+            <div class="admin-filter-row">
+              <div>
+                <label for="activityTestFilter">Test</label>
+                <select id="activityTestFilter"></select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Email</th>
+                    <th>Test</th>
+                    <th>Activity</th>
+                  </tr>
+                </thead>
+                <tbody id="activityBody">
+                  <tr>
+                    <td colspan="4" class="subtle">No activity loaded yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      <p id="adminLoginError"></p>
-      <div class="help">Admins</div>
-    </div>
+          <div id="usersTab" class="hidden">
+            <form id="addUserForm" class="admin-form" autocomplete="off">
+              <div>
+                <label for="newUserEmail">Email</label>
+                <input
+                  id="newUserEmail"
+                  type="email"
+                  placeholder="name@example.com"
+                  required
+                />
+              </div>
+
+              <div>
+                <label for="newUserRole">Role</label>
+                <select id="newUserRole">
+                  <option value="captioner">captioner</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="newUserTest">Assigned test</label>
+                <select id="newUserTest"></select>
+              </div>
+
+              <div>
+                <label>&nbsp;</label>
+                <button class="btn--primary" type="submit">
+                  Add / Reactivate
+                </button>
+              </div>
+            </form>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Assigned Test</th>
+                    <th>Status</th>
+                    <th>Last Login</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="usersBody">
+                  <tr>
+                    <td colspan="7" class="subtle">No data loaded yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="testsTab" class="hidden">
+            <form id="testForm" class="test-form" autocomplete="off">
+              <input id="testId" type="hidden" />
+              <div class="form-grid-2">
+                <div>
+                  <label for="testTitle">Test title</label>
+                  <input id="testTitle" type="text" required />
+                </div>
+                <div>
+                  <label for="testSubtitle">Subtitle</label>
+                  <input id="testSubtitle" type="text" />
+                </div>
+                <div>
+                  <label for="testAudioSelect">Test Audio button file</label>
+                  <select id="testAudioSelect"></select>
+                </div>
+                <div>
+                  <label for="sourceMediaSelect">Assessment source media</label>
+                  <select id="sourceMediaSelect"></select>
+                </div>
+              </div>
+
+              <label>Instructions</label>
+              <div class="editor-toolbar" data-editor="testInstructionsEditor">
+                <button type="button" data-command="bold">B</button>
+                <button type="button" data-command="italic">I</button>
+                <button type="button" data-command="underline">U</button>
+                <button type="button" data-command="insertUnorderedList">
+                  List
+                </button>
+              </div>
+              <div
+                id="testInstructionsEditor"
+                class="rich-editor"
+                contenteditable="true"
+              ></div>
+
+              <label>Prep content</label>
+              <div class="editor-toolbar" data-editor="testPrepEditor">
+                <button type="button" data-command="bold">B</button>
+                <button type="button" data-command="italic">I</button>
+                <button type="button" data-command="underline">U</button>
+                <button type="button" data-command="insertUnorderedList">
+                  List
+                </button>
+              </div>
+              <div
+                id="testPrepEditor"
+                class="rich-editor"
+                contenteditable="true"
+              ></div>
+
+              <div class="btn-row">
+                <button id="saveTestBtn" class="btn--primary" type="submit">
+                  Save Test
+                </button>
+                <button id="newTestBtn" class="btn--ghost" type="button">
+                  New Test
+                </button>
+              </div>
+            </form>
+
+            <div class="table-wrap" style="margin-top: 14px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Test Audio</th>
+                    <th>Source Media</th>
+                    <th>Assigned Users</th>
+                    <th>Updated</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="testsBody">
+                  <tr>
+                    <td colspan="6" class="subtle">No tests loaded yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="mediaTab" class="hidden">
+            <form id="mediaUploadForm" class="admin-form" autocomplete="off">
+              <div>
+                <label for="mediaLabel">Label</label>
+                <input id="mediaLabel" type="text" placeholder="Speaker test" />
+              </div>
+              <div>
+                <label for="mediaUsage">Use</label>
+                <select id="mediaUsage">
+                  <option value="test_audio">Test Audio button</option>
+                  <option value="source">Assessment source</option>
+                </select>
+              </div>
+              <div>
+                <label for="mediaFile">File</label>
+                <input id="mediaFile" type="file" />
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button class="btn--primary" type="submit">Upload</button>
+              </div>
+            </form>
+            <div id="mediaHelp" class="help"></div>
+            <div class="table-wrap" style="margin-top: 10px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Label</th>
+                    <th>Use</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>File</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="mediaBody">
+                  <tr>
+                    <td colspan="7" class="subtle">No media loaded yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   </body>
 </html>

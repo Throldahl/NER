@@ -1,118 +1,104 @@
 <?php
-// api_auth.php — email gate + admin login using PHP sessions
+// api_auth.php - unified email/Google gate using PHP sessions
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/app_lib.php';
 
-$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-
-if (defined('SESSION_NAME')) {
-  session_name(SESSION_NAME);
-}
-session_set_cookie_params([
-  'httponly' => true,
-  'samesite' => 'Lax',
-  'secure' => $secure,
-]);
-
-if (defined('SESSION_NAME')) session_name(SESSION_NAME);
-
-if (session_status() !== PHP_SESSION_ACTIVE) {
-  session_start();
-}
-
-function json_out(array $data, int $code = 200): void {
-  http_response_code($code);
-  echo json_encode($data);
-  exit;
-}
+captionerner_start_session();
 
 $raw = file_get_contents('php://input');
 $body = json_decode($raw ?: '[]', true);
 if (!is_array($body)) $body = [];
 
-$action = $body['action'] ?? '';
+$action = (string)($body['action'] ?? '');
 
 try {
   $pdo = captionerner_db();
+  captionerner_ensure_schema($pdo);
+
+  if ($action === 'config') {
+    captionerner_json_out([
+      'ok' => true,
+      'google_client_id' => captionerner_google_client_id(),
+      'google_required_domain' => captionerner_google_domain(),
+      'test_audio_max_mb' => (int)(CAPTIONERNER_TEST_AUDIO_MAX_BYTES / 1048576),
+      'source_media_max_mb' => (int)(CAPTIONERNER_SOURCE_MEDIA_MAX_BYTES / 1048576),
+      'allowed_test_audio' => captionerner_allowed_uploads('test_audio')['extensions'],
+      'allowed_source_media' => captionerner_allowed_uploads('source')['extensions'],
+    ]);
+  }
 
   if ($action === 'whoami') {
     $email = $_SESSION['user_email'] ?? null;
     $role = $_SESSION['user_role'] ?? null;
-    if ($email && $role) json_out(['ok' => true, 'email' => $email, 'role' => $role]);
-    json_out(['ok' => false, 'message' => 'Not logged in.'], 200);
+    $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+    if (!$email || !$role || $userId <= 0) {
+      captionerner_json_out(['ok' => false, 'message' => 'Not logged in.'], 200);
+    }
+
+    $stmt = $pdo->prepare('SELECT id, email, role, is_active, test_id FROM captionerner_users WHERE id = ? LIMIT 1');
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch();
+    if (!$user || (int)$user['is_active'] !== 1) {
+      captionerner_json_out(['ok' => false, 'message' => 'Not logged in.'], 200);
+    }
+
+    captionerner_json_out(captionerner_auth_payload($pdo, $user));
   }
 
   if ($action === 'logout') {
     $_SESSION = [];
-    if (ini_get("session.use_cookies")) {
+    if (ini_get('session.use_cookies')) {
       $params = session_get_cookie_params();
-      setcookie(session_name(), '', time() - 42000,
-        $params["path"], $params["domain"], $params["secure"], $params["httponly"]
-      );
+      setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
     }
     session_destroy();
-    json_out(['ok' => true]);
+    captionerner_json_out(['ok' => true]);
   }
 
-  if ($action === 'gate') {
+  if ($action === 'email_login' || $action === 'gate') {
     $email = strtolower(trim((string)($body['email'] ?? '')));
-    if ($email === '' || !str_ends_with($email, '@3playmedia.com')) {
-      json_out(['ok' => false, 'message' => 'Invalid email domain.'], 400);
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+      captionerner_json_out(['ok' => false, 'message' => 'Enter a valid email address.'], 400);
+    }
+    if (captionerner_is_google_domain_email($email)) {
+      captionerner_json_out(['ok' => false, 'message' => 'Use Google Sign-In for @' . captionerner_google_domain() . ' accounts.'], 403);
     }
 
-    $stmt = $pdo->prepare("SELECT id, email, role, is_active FROM captionerner_users WHERE email = ? LIMIT 1");
-    $stmt->execute([$email]);
-    $u = $stmt->fetch();
-
-    if (!$u || (int)$u['is_active'] !== 1) {
-      json_out(['ok' => false, 'message' => 'Email not recognized.'], 403);
+    $user = captionerner_fetch_user($pdo, $email);
+    if (!$user || (int)$user['is_active'] !== 1) {
+      captionerner_log_activity($pdo, 'login_denied', 'Login denied', [
+        'user_email' => $email,
+        'details' => ['reason' => 'unknown_or_inactive', 'auth_method' => 'email'],
+      ]);
+      captionerner_json_out(['ok' => false, 'message' => 'Email not recognized.'], 403);
     }
 
-    // Gate sets a session for metrics logging (admins can still use assessment)
-    $_SESSION['user_email'] = $u['email'];
-    $_SESSION['user_role']  = $u['role'];
-    $_SESSION['user_id']    = (int)$u['id'];
-    $_SESSION['assessment_slug'] = defined('DEFAULT_ASSESSMENT_SLUG') ? DEFAULT_ASSESSMENT_SLUG : 'default';
-
-
-    json_out(['ok' => true, 'role' => $u['role']]);
+    captionerner_json_out(captionerner_set_login_session($pdo, $user, 'email'));
   }
 
-  if ($action === 'admin_login') {
-    $email = strtolower(trim((string)($body['email'] ?? '')));
-    $password = (string)($body['password'] ?? '');
-
-    if ($email === '' || $password === '') {
-      json_out(['ok' => false, 'message' => 'Email and password required.'], 400);
+  if ($action === 'google_login') {
+    try {
+      $google = captionerner_verify_google_token((string)($body['credential'] ?? ''));
+    } catch (Throwable $e) {
+      captionerner_json_out(['ok' => false, 'message' => $e->getMessage()], 403);
     }
 
-    $stmt = $pdo->prepare("SELECT id, email, role, is_active, password_hash FROM captionerner_users WHERE email = ? LIMIT 1");
-    $stmt->execute([$email]);
-    $u = $stmt->fetch();
-
-    if (!$u || (int)$u['is_active'] !== 1 || $u['role'] !== 'admin') {
-      json_out(['ok' => false, 'message' => 'Not authorized.'], 403);
+    $user = captionerner_fetch_user($pdo, $google['email']);
+    if (!$user || (int)$user['is_active'] !== 1) {
+      captionerner_log_activity($pdo, 'login_denied', 'Login denied', [
+        'user_email' => $google['email'],
+        'details' => ['reason' => 'unknown_or_inactive', 'auth_method' => 'google'],
+      ]);
+      captionerner_json_out(['ok' => false, 'message' => 'Google account is valid, but this email has not been added for access.'], 403);
     }
 
-    $hash = (string)($u['password_hash'] ?? '');
-    if ($hash === '' || !password_verify($password, $hash)) {
-      json_out(['ok' => false, 'message' => 'Invalid credentials.'], 403);
-    }
-
-    $_SESSION['user_email'] = $u['email'];
-    $_SESSION['user_role']  = $u['role'];
-    $_SESSION['user_id']    = (int)$u['id'];
-    $_SESSION['assessment_slug'] = defined('DEFAULT_ASSESSMENT_SLUG') ? DEFAULT_ASSESSMENT_SLUG : 'default';
-
-
-    json_out(['ok' => true, 'role' => 'admin']);
+    captionerner_json_out(captionerner_set_login_session($pdo, $user, 'google'));
   }
 
-  json_out(['ok' => false, 'message' => 'Unknown action.'], 400);
-
+  captionerner_json_out(['ok' => false, 'message' => 'Unknown action.'], 400);
 } catch (Throwable $e) {
-  json_out(['ok' => false, 'error' => 'Server error.'], 500);
+  captionerner_json_out(['ok' => false, 'error' => 'Server error.'], 500);
 }
