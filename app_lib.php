@@ -100,9 +100,14 @@ function captionerner_is_default_admin_email(string $email): bool {
 
 function captionerner_table_exists(PDO $pdo, string $table): bool {
   try {
-    $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+    $stmt = $pdo->prepare("
+      SELECT COUNT(*)
+      FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+    ");
     $stmt->execute([$table]);
-    return (bool)$stmt->fetch();
+    return (int)$stmt->fetchColumn() > 0;
   } catch (Throwable $e) {
     return false;
   }
@@ -112,9 +117,15 @@ function captionerner_column_exists(PDO $pdo, string $table, string $column): bo
   if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) return false;
   if (!captionerner_table_exists($pdo, $table)) return false;
   try {
-    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
-    $stmt->execute([$column]);
-    return (bool)$stmt->fetch();
+    $stmt = $pdo->prepare("
+      SELECT COUNT(*)
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+    ");
+    $stmt->execute([$table, $column]);
+    return (int)$stmt->fetchColumn() > 0;
   } catch (Throwable $e) {
     return false;
   }
@@ -124,9 +135,15 @@ function captionerner_index_exists(PDO $pdo, string $table, string $index): bool
   if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) return false;
   if (!captionerner_table_exists($pdo, $table)) return false;
   try {
-    $stmt = $pdo->prepare("SHOW INDEX FROM `{$table}` WHERE Key_name = ?");
-    $stmt->execute([$index]);
-    return (bool)$stmt->fetch();
+    $stmt = $pdo->prepare("
+      SELECT COUNT(*)
+      FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND INDEX_NAME = ?
+    ");
+    $stmt->execute([$table, $index]);
+    return (int)$stmt->fetchColumn() > 0;
   } catch (Throwable $e) {
     return false;
   }
