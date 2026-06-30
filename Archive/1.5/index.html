@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Winter 2026 Employee NER</title>
+    <link rel="icon" type="image/png" href="favicon-32x32.svg" sizes="32x32" />
+    <!-- <link rel="icon" type="image/png" href="favicon-16x16.png" sizes="16x16" /> -->
+    <link rel="stylesheet" href="style_1.5.css" />
+    <script
+      src="https://code.jquery.com/jquery-3.7.1.js"
+      integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4="
+      crossorigin="anonymous"
+    ></script>
+    <!-- <script src="jquery.js"></script> -->
+    <script defer src="script_1.5.js"></script>
+    <script defer src="../siteLoad.js"></script>
+    <meta name="robots" content="noindex" />
+    <meta name="author" content="Derek Throldahl" />
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+  </head>
+
+  <body>
+    <header>
+      <h1>Summer 2025 Employee NER</h1>
+    </header>
+
+    <div id="info-sections">
+      <section id="instructions">
+        <p>
+          Please set up for a StreamText event. Prep is to the right with a
+          button below to test audio. When you are ready to begin, message the
+          coordinators on Slack and ask them to start your StreamText session.
+          Once you receive confirmation, you can continue.<br /><br />Enter your
+          3Play Media email address and click Start Assessment to begin. You
+          will see a 10-second countdown, then the video will automatically play
+          without the ability to pause or rewind.<br /><br />Let the
+          coordinators know when you finish. As a last step, please complete
+          your Winter NER Assessment job on the 3Play platform.
+        </p>
+      </section>
+
+      <section id="prep">
+        <p>
+          <b>IDs:</b><br />
+          >> Anastasia: (interviewer - will be the first speaker)<br />>> Nick:
+          (male interviewee)<br />>> Sarah: (female interviewee)
+          <b>Description:</b><br />
+          Podcast interview with a cycling power-couple, talking about living
+          and training together.<br /><br />
+          <b>Terms:</b><br />
+          Hugo Barrette<br />
+          keirin<br />
+          Kirsti Lay<br />
+          Megan Rapinoe<br />
+          omnium<br />
+          <i>NOTE:</i>There is a term from our nulled list used in this segment
+          (not in an offensive way, just as a description). Be prepared to write
+          it.
+        </p>
+      </section>
+    </div>
+
+    <div class="content-container">
+      <section id="form-section">
+        <button id="testAudioBtn" type="button">Test Audio</button>
+        <div id="audioVisualizer" class="visualizer">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+        <br /><br />
+        <input
+          type="email"
+          id="email"
+          placeholder="yourname@3playmedia.com"
+          required
+        />
+        <button id="startBtn">Start Assessment</button>
+        <p id="error-message"></p>
+      </section>
+
+      <audio id="testAudio" preload="auto">
+        <source src="test-audio.mp3" type="audio/mp3" />
+        Your browser does not support the audio tag.
+      </audio>
+
+      <section id="countdown-section" class="hidden">
+        <p>
+          Assessment will begin in <span id="countdown">10</span> seconds...
+        </p>
+        <button id="cancelCountdownBtn" type="button">Cancel</button>
+      </section>
+
+      <section id="video-section" class="hidden">
+        <video id="assessmentVideo" preload="auto">
+          <source src="NERVideo.mp4" type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      </section>
+    </div>
+
+    <!-- MODAL OVERLAY -->
+    <div class="modal hidden">
+      <button class="btn--close-modal">&times;</button>
+      <h3 class="modal__header">Header here!</h3>
+      <p id="modalContent">The content will go here!</p>
+    </div>
+    <div class="overlay hidden"></div>
+  </body>
+</html>
