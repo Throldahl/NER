@@ -28,7 +28,11 @@ if ($action === 'config') {
 
 try {
   $pdo = captionerner_db();
-  captionerner_ensure_schema($pdo);
+  try {
+    captionerner_ensure_schema($pdo);
+  } catch (Throwable $schemaError) {
+    error_log('captionerner schema setup failed during auth: ' . $schemaError->getMessage());
+  }
 
   if ($action === 'whoami') {
     $email = $_SESSION['user_email'] ?? null;
@@ -100,5 +104,6 @@ try {
 
   captionerner_json_out(['ok' => false, 'message' => 'Unknown action.'], 400);
 } catch (Throwable $e) {
-  captionerner_json_out(['ok' => false, 'error' => 'Server error.'], 500);
+  error_log('captionerner auth failed: ' . $e->getMessage());
+  captionerner_json_out(['ok' => false, 'error' => 'Server error.', 'detail' => $e->getMessage()], 500);
 }

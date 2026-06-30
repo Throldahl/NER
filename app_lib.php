@@ -8,6 +8,18 @@ const CAPTIONERNER_UPLOAD_DIR = 'uploads/ner-media';
 const CAPTIONERNER_TEST_AUDIO_MAX_BYTES = 52428800; // 50 MB
 const CAPTIONERNER_SOURCE_MEDIA_MAX_BYTES = 524288000; // 500 MB
 
+if (!function_exists('str_ends_with')) {
+  function str_ends_with(string $haystack, string $needle): bool {
+    return $needle === '' || substr($haystack, -strlen($needle)) === $needle;
+  }
+}
+
+if (!function_exists('str_starts_with')) {
+  function str_starts_with(string $haystack, string $needle): bool {
+    return $needle === '' || strncmp($haystack, $needle, strlen($needle)) === 0;
+  }
+}
+
 function captionerner_start_session(): void {
   $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
   if (defined('SESSION_NAME')) {
@@ -252,6 +264,7 @@ function captionerner_ensure_schema(PDO $pdo): void {
   ");
 
   $defaultTestId = captionerner_seed_default_test($pdo);
+  captionerner_seed_default_admin($pdo, $defaultTestId);
   if ($usersTestColumnAdded && $defaultTestId > 0) {
     $stmt = $pdo->prepare('UPDATE captionerner_users SET test_id = :test_id WHERE test_id IS NULL');
     $stmt->execute([':test_id' => $defaultTestId]);
@@ -321,6 +334,18 @@ function captionerner_seed_default_test(PDO $pdo): int {
   return (int)($lookup->fetchColumn() ?: 0);
 }
 
+function captionerner_seed_default_admin(PDO $pdo, int $defaultTestId): void {
+  $stmt = $pdo->prepare("
+    INSERT INTO captionerner_users (email, role, is_active, test_id)
+    VALUES ('dthroldahl@3playmedia.com', 'admin', 1, :test_id)
+    ON DUPLICATE KEY UPDATE
+      role = 'admin',
+      is_active = 1,
+      test_id = COALESCE(test_id, VALUES(test_id))
+  ");
+  $stmt->execute([':test_id' => $defaultTestId > 0 ? $defaultTestId : null]);
+}
+
 function captionerner_file_size(string $relativePath): int {
   $path = __DIR__ . '/' . ltrim($relativePath, '/');
   return is_file($path) ? (int)filesize($path) : 0;
@@ -340,7 +365,8 @@ function captionerner_sanitize_html(string $html): string {
 }
 
 function captionerner_fetch_user(PDO $pdo, string $email): ?array {
-  $stmt = $pdo->prepare('SELECT id, email, role, is_active, test_id FROM captionerner_users WHERE email = ? LIMIT 1');
+  $testColumn = captionerner_column_exists($pdo, 'captionerner_users', 'test_id') ? 'test_id' : 'NULL AS test_id';
+  $stmt = $pdo->prepare("SELECT id, email, role, is_active, {$testColumn} FROM captionerner_users WHERE email = ? LIMIT 1");
   $stmt->execute([strtolower(trim($email))]);
   $row = $stmt->fetch();
   return $row ?: null;
@@ -348,6 +374,7 @@ function captionerner_fetch_user(PDO $pdo, string $email): ?array {
 
 function captionerner_fetch_test(PDO $pdo, ?int $testId): ?array {
   if (!$testId) return null;
+  if (!captionerner_table_exists($pdo, 'captionerner_tests') || !captionerner_table_exists($pdo, 'captionerner_media')) return null;
   $stmt = $pdo->prepare("
     SELECT
       t.id,
@@ -401,8 +428,10 @@ function captionerner_set_login_session(PDO $pdo, array $user, string $authMetho
   $_SESSION['assessment_slug'] = defined('DEFAULT_ASSESSMENT_SLUG') ? DEFAULT_ASSESSMENT_SLUG : 'default';
   $_SESSION['auth_method'] = $authMethod;
 
-  $stmt = $pdo->prepare('UPDATE captionerner_users SET last_login_at = NOW() WHERE id = ? LIMIT 1');
-  $stmt->execute([(int)$user['id']]);
+  if (captionerner_column_exists($pdo, 'captionerner_users', 'last_login_at')) {
+    $stmt = $pdo->prepare('UPDATE captionerner_users SET last_login_at = NOW() WHERE id = ? LIMIT 1');
+    $stmt->execute([(int)$user['id']]);
+  }
 
   captionerner_log_activity($pdo, 'login', 'Logged in', [
     'user_id' => (int)$user['id'],
@@ -415,23 +444,28 @@ function captionerner_set_login_session(PDO $pdo, array $user, string $authMetho
 }
 
 function captionerner_log_activity(PDO $pdo, string $eventType, string $eventLabel, array $opts = []): void {
-  $details = $opts['details'] ?? null;
-  $detailsJson = $details === null ? null : json_encode($details, JSON_UNESCAPED_SLASHES);
-  $stmt = $pdo->prepare("
-    INSERT INTO captionerner_activity_log
-      (user_id, user_email, test_id, assessment_id, event_type, event_label, details_json)
-    VALUES
-      (:user_id, :user_email, :test_id, :assessment_id, :event_type, :event_label, :details_json)
-  ");
-  $stmt->execute([
-    ':user_id' => isset($opts['user_id']) && $opts['user_id'] ? (int)$opts['user_id'] : null,
-    ':user_email' => isset($opts['user_email']) ? (string)$opts['user_email'] : null,
-    ':test_id' => isset($opts['test_id']) && $opts['test_id'] ? (int)$opts['test_id'] : null,
-    ':assessment_id' => isset($opts['assessment_id']) && $opts['assessment_id'] ? (int)$opts['assessment_id'] : null,
-    ':event_type' => $eventType,
-    ':event_label' => $eventLabel,
-    ':details_json' => $detailsJson,
-  ]);
+  try {
+    if (!captionerner_table_exists($pdo, 'captionerner_activity_log')) return;
+    $details = $opts['details'] ?? null;
+    $detailsJson = $details === null ? null : json_encode($details, JSON_UNESCAPED_SLASHES);
+    $stmt = $pdo->prepare("
+      INSERT INTO captionerner_activity_log
+        (user_id, user_email, test_id, assessment_id, event_type, event_label, details_json)
+      VALUES
+        (:user_id, :user_email, :test_id, :assessment_id, :event_type, :event_label, :details_json)
+    ");
+    $stmt->execute([
+      ':user_id' => isset($opts['user_id']) && $opts['user_id'] ? (int)$opts['user_id'] : null,
+      ':user_email' => isset($opts['user_email']) ? (string)$opts['user_email'] : null,
+      ':test_id' => isset($opts['test_id']) && $opts['test_id'] ? (int)$opts['test_id'] : null,
+      ':assessment_id' => isset($opts['assessment_id']) && $opts['assessment_id'] ? (int)$opts['assessment_id'] : null,
+      ':event_type' => $eventType,
+      ':event_label' => $eventLabel,
+      ':details_json' => $detailsJson,
+    ]);
+  } catch (Throwable $e) {
+    error_log('captionerner activity log failed: ' . $e->getMessage());
+  }
 }
 
 function captionerner_verify_google_token(string $credential): array {
