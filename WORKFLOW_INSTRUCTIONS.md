@@ -37,13 +37,13 @@ git commit -m "chore: initial project setup"
 git push -u origin main
 ```
 8. In Hostinger `Advanced > GIT`:
-- Add Hostinger SSH key to GitHub access.
+- Add Hostinger SSH key to GitHub access <Only necessary once for all projects>.
 - Create one repository entry for this project:
 - Repository: `git@github.com:Throldahl/<project-folder-name>.git`
 - Branch: `main`
-- Directory: `<project-folder-name>` (subfolder only, not root)
+- Directory: `<project-folder-name>` (folder must be empty)(subfolder only, not root)
 - Deploy.
-9. In Hostinger, choose to set Auto Deployment
+9. In Hostinger, choose to set Auto Deployment. Click Setup Webhook on Github
 
 ## 2) Start a Work Session (Existing Project)
 Preferred in VS Code Source Control:
