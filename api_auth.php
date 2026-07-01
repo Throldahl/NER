@@ -21,6 +21,8 @@ if ($action === 'config') {
     'google_required_domain' => captionerner_google_domain(),
     'test_audio_max_mb' => (int)(CAPTIONERNER_TEST_AUDIO_MAX_BYTES / 1048576),
     'source_media_max_mb' => (int)(CAPTIONERNER_SOURCE_MEDIA_MAX_BYTES / 1048576),
+    'php_upload_max_mb' => (int)(captionerner_ini_bytes((string)ini_get('upload_max_filesize')) / 1048576),
+    'php_post_max_mb' => (int)(captionerner_ini_bytes((string)ini_get('post_max_size')) / 1048576),
     'allowed_test_audio' => captionerner_allowed_uploads('test_audio')['extensions'],
     'allowed_source_media' => captionerner_allowed_uploads('source')['extensions'],
   ]);

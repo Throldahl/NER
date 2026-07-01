@@ -88,6 +88,8 @@ let appConfig = {
   config_loaded: false,
   test_audio_max_mb: 50,
   source_media_max_mb: 500,
+  php_upload_max_mb: 0,
+  php_post_max_mb: 0,
   allowed_test_audio: ["mp3", "wav", "m4a", "aac"],
   allowed_source_media: ["mp3", "wav", "m4a", "aac", "mp4", "mov", "webm"],
 };
@@ -191,6 +193,27 @@ function fmtBytes(bytes) {
   return `${n} B`;
 }
 
+function uploadRulesForUsage(usage) {
+  if (usage === "test_audio") {
+    return {
+      extensions: appConfig.allowed_test_audio,
+      appMaxBytes: Number(appConfig.test_audio_max_mb || 0) * 1048576,
+    };
+  }
+  return {
+    extensions: appConfig.allowed_source_media,
+    appMaxBytes: Number(appConfig.source_media_max_mb || 0) * 1048576,
+  };
+}
+
+function serverUploadLimitBytes() {
+  const limits = [appConfig.php_upload_max_mb, appConfig.php_post_max_mb]
+    .map(Number)
+    .filter((n) => n > 0)
+    .map((n) => n * 1048576);
+  return limits.length ? Math.min(...limits) : 0;
+}
+
 function badgeYesNo(val) {
   const yes =
     !!val && (val === true || val === 1 || val === "1" || val === "yes");
@@ -212,6 +235,9 @@ function setMessage(el, text, ok = false) {
 
 function responseMessage(data, fallback) {
   if (!data) return fallback;
+  if (data.error === "Non-JSON response" && data.raw) {
+    return "The server rejected the request before the app could process it. The file may exceed Hostinger/PHP upload limits.";
+  }
   if (data.message) return data.message;
   if (data.detail) return `${data.error || "Server error."} ${data.detail}`;
   if (data.error) return data.error;
@@ -562,7 +588,11 @@ async function loadConfig() {
   const r = await postJSON(API_AUTH, { action: "config" });
   if (r.ok && r.data && r.data.ok) {
     appConfig = { ...appConfig, ...r.data, config_loaded: true };
-    mediaHelp.textContent = `Test audio: ${appConfig.allowed_test_audio.join(", ")} up to ${appConfig.test_audio_max_mb} MB. Source media: ${appConfig.allowed_source_media.join(", ")} up to ${appConfig.source_media_max_mb} MB.`;
+    const serverCaps = [appConfig.php_upload_max_mb, appConfig.php_post_max_mb]
+      .map(Number)
+      .filter((n) => n > 0);
+    const serverCap = serverCaps.length ? Math.min(...serverCaps) : 0;
+    mediaHelp.textContent = `Test audio: ${appConfig.allowed_test_audio.join(", ")} up to ${appConfig.test_audio_max_mb} MB. Source media: ${appConfig.allowed_source_media.join(", ")} up to ${appConfig.source_media_max_mb} MB.${serverCap ? ` Server cap: ${serverCap} MB per upload.` : ""}`;
     renderGoogleButton();
   }
 }
@@ -1185,14 +1215,32 @@ mediaUploadForm.addEventListener("submit", async (e) => {
     alert("Choose a media file to upload.");
     return;
   }
+  const file = mediaFile.files[0];
+  const usage = mediaUsage.value;
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const rules = uploadRulesForUsage(usage);
+  if (!rules.extensions.includes(ext)) {
+    alert(`Unsupported file type. Allowed: ${rules.extensions.join(", ")}.`);
+    return;
+  }
+  if (rules.appMaxBytes > 0 && file.size > rules.appMaxBytes) {
+    alert(`This file is too large for this upload type. Limit: ${fmtBytes(rules.appMaxBytes)}.`);
+    return;
+  }
+  const serverMaxBytes = serverUploadLimitBytes();
+  if (serverMaxBytes > 0 && file.size > serverMaxBytes) {
+    alert(`This file is larger than the server upload limit of ${fmtBytes(serverMaxBytes)}. Increase Hostinger/PHP upload limits or choose a smaller file.`);
+    return;
+  }
+
   const formData = new FormData();
   formData.append("action", "media_upload");
   formData.append("label", mediaLabel.value);
-  formData.append("usage_kind", mediaUsage.value);
-  formData.append("media_file", mediaFile.files[0]);
+  formData.append("usage_kind", usage);
+  formData.append("media_file", file);
   const r = await postForm(API_ADMIN, formData);
   if (!r.ok || !r.data || !r.data.ok) {
-    alert((r.data && (r.data.message || r.data.error)) || "Upload failed.");
+    alert(responseMessage(r.data, "Upload failed."));
     return;
   }
   mediaLabel.value = "";

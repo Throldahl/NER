@@ -27,6 +27,17 @@ $isMultipart = stripos($contentType, 'multipart/form-data') !== false;
 $body = $isMultipart ? $_POST : json_decode(file_get_contents('php://input') ?: '[]', true);
 if (!is_array($body)) $body = [];
 
+if ($isMultipart && empty($_POST) && empty($_FILES)) {
+  $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
+  $postMax = captionerner_ini_bytes((string)ini_get('post_max_size'));
+  if ($contentLength > 0 && $postMax > 0 && $contentLength > $postMax) {
+    captionerner_json_out([
+      'ok' => false,
+      'message' => 'This upload exceeds the server request limit of ' . captionerner_format_bytes($postMax) . '. Increase Hostinger/PHP post_max_size and upload_max_filesize or choose a smaller file.',
+    ], 413);
+  }
+}
+
 $action = (string)($body['action'] ?? '');
 
 function admin_media_row(PDO $pdo, int $id): ?array {
@@ -503,5 +514,8 @@ try {
   captionerner_json_out(['ok' => false, 'message' => 'Unknown action.'], 400);
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
+  if ($e instanceof RuntimeException) {
+    captionerner_json_out(['ok' => false, 'message' => $e->getMessage()], 400);
+  }
   captionerner_json_out(['ok' => false, 'error' => 'Server error.', 'detail' => $e->getMessage()], 500);
 }

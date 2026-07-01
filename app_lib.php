@@ -743,6 +743,60 @@ function captionerner_allowed_uploads(string $usageKind): array {
   ];
 }
 
+function captionerner_ini_bytes(string $value): int {
+  $value = trim($value);
+  if ($value === '') return 0;
+
+  $unit = strtolower(substr($value, -1));
+  $number = (float)$value;
+  switch ($unit) {
+    case 'g':
+      $number *= 1024;
+      // no break
+    case 'm':
+      $number *= 1024;
+      // no break
+    case 'k':
+      $number *= 1024;
+      break;
+  }
+
+  return (int)$number;
+}
+
+function captionerner_format_bytes(int $bytes): string {
+  if ($bytes >= 1073741824) return round($bytes / 1073741824, 1) . ' GB';
+  if ($bytes >= 1048576) return round($bytes / 1048576, 1) . ' MB';
+  if ($bytes >= 1024) return round($bytes / 1024, 1) . ' KB';
+  return $bytes . ' B';
+}
+
+function captionerner_upload_error_message(int $errorCode): string {
+  $uploadMax = captionerner_ini_bytes((string)ini_get('upload_max_filesize'));
+  $postMax = captionerner_ini_bytes((string)ini_get('post_max_size'));
+  $limits = array_values(array_filter([$uploadMax, $postMax], static fn($v) => $v > 0));
+  $serverLimit = $limits ? min($limits) : max($uploadMax, $postMax);
+  $serverLimitText = $serverLimit > 0 ? captionerner_format_bytes((int)$serverLimit) : 'the server limit';
+
+  switch ($errorCode) {
+    case UPLOAD_ERR_INI_SIZE:
+    case UPLOAD_ERR_FORM_SIZE:
+      return 'The uploaded file exceeds the server upload limit of ' . $serverLimitText . '. Increase Hostinger/PHP upload limits or choose a smaller file.';
+    case UPLOAD_ERR_PARTIAL:
+      return 'The upload only partially completed. Please try again.';
+    case UPLOAD_ERR_NO_FILE:
+      return 'Choose a media file to upload.';
+    case UPLOAD_ERR_NO_TMP_DIR:
+      return 'The server is missing a temporary upload folder.';
+    case UPLOAD_ERR_CANT_WRITE:
+      return 'The server could not write the uploaded file.';
+    case UPLOAD_ERR_EXTENSION:
+      return 'A server extension stopped the upload.';
+    default:
+      return 'Upload failed. Check the file size and try again.';
+  }
+}
+
 function captionerner_media_kind_from_extension(string $ext): string {
   return in_array($ext, ['mp4', 'mov', 'webm'], true) ? 'video' : 'audio';
 }
@@ -802,7 +856,7 @@ function captionerner_store_upload(PDO $pdo, array $file, string $usageKind, str
     throw new RuntimeException('Invalid media usage.');
   }
   if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-    throw new RuntimeException('Upload failed. Check the file size and try again.');
+    throw new RuntimeException(captionerner_upload_error_message((int)($file['error'] ?? UPLOAD_ERR_NO_FILE)));
   }
 
   $original = (string)($file['name'] ?? '');
@@ -813,7 +867,7 @@ function captionerner_store_upload(PDO $pdo, array $file, string $usageKind, str
     throw new RuntimeException('Unsupported file type.');
   }
   if ($size <= 0 || $size > (int)$rules['max_bytes']) {
-    throw new RuntimeException('File is too large for this upload type.');
+    throw new RuntimeException('File is too large for this upload type. Limit: ' . captionerner_format_bytes((int)$rules['max_bytes']) . '.');
   }
 
   captionerner_ensure_upload_dir();
