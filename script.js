@@ -206,6 +206,19 @@ function uploadRulesForUsage(usage) {
   };
 }
 
+function fileExtension(file) {
+  return ((file && file.name ? file.name : "").split(".").pop() || "").toLowerCase();
+}
+
+function isVideoUploadExtension(ext) {
+  return ["mp4", "mov", "webm"].includes(ext);
+}
+
+function mediaUsageForFile(file) {
+  const ext = fileExtension(file);
+  return isVideoUploadExtension(ext) ? "source" : mediaUsage.value;
+}
+
 function serverUploadLimitBytes() {
   const limits = [appConfig.php_upload_max_mb, appConfig.php_post_max_mb]
     .map(Number)
@@ -1216,11 +1229,12 @@ mediaUploadForm.addEventListener("submit", async (e) => {
     return;
   }
   const file = mediaFile.files[0];
-  const usage = mediaUsage.value;
-  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const usage = mediaUsageForFile(file);
+  mediaUsage.value = usage;
+  const ext = fileExtension(file);
   const rules = uploadRulesForUsage(usage);
   if (!rules.extensions.includes(ext)) {
-    alert(`Unsupported file type. Allowed: ${rules.extensions.join(", ")}.`);
+    alert(`Unsupported file type for ${usage === "source" ? "Assessment source" : "Test Audio button"}. Allowed: ${rules.extensions.join(", ")}.`);
     return;
   }
   if (rules.appMaxBytes > 0 && file.size > rules.appMaxBytes) {
@@ -1247,6 +1261,13 @@ mediaUploadForm.addEventListener("submit", async (e) => {
   mediaFile.value = "";
   await loadAdminReferenceData();
   renderMediaTable();
+});
+
+mediaFile.addEventListener("change", () => {
+  const file = mediaFile.files && mediaFile.files[0];
+  if (file && isVideoUploadExtension(fileExtension(file))) {
+    mediaUsage.value = "source";
+  }
 });
 
 mediaBody.addEventListener("click", async (e) => {

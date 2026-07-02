@@ -862,9 +862,12 @@ function captionerner_store_upload(PDO $pdo, array $file, string $usageKind, str
   $original = (string)($file['name'] ?? '');
   $size = (int)($file['size'] ?? 0);
   $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+  if ($usageKind === 'test_audio' && in_array($ext, ['mp4', 'mov', 'webm'], true)) {
+    $usageKind = 'source';
+  }
   $rules = captionerner_allowed_uploads($usageKind);
   if (!in_array($ext, $rules['extensions'], true)) {
-    throw new RuntimeException('Unsupported file type.');
+    throw new RuntimeException('Unsupported file type for this media use.');
   }
   if ($size <= 0 || $size > (int)$rules['max_bytes']) {
     throw new RuntimeException('File is too large for this upload type. Limit: ' . captionerner_format_bytes((int)$rules['max_bytes']) . '.');

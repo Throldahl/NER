@@ -221,13 +221,16 @@ try {
   if ($action === 'media_upload') {
     $usageKind = (string)($body['usage_kind'] ?? 'source');
     $label = (string)($body['label'] ?? '');
-    $mediaId = captionerner_store_upload($pdo, $_FILES['media_file'] ?? [], $usageKind, $label, $adminId);
+    $uploadFile = $_FILES['media_file'] ?? [];
+    $uploadExt = strtolower(pathinfo((string)($uploadFile['name'] ?? ''), PATHINFO_EXTENSION));
+    $effectiveUsageKind = ($usageKind === 'test_audio' && in_array($uploadExt, ['mp4', 'mov', 'webm'], true)) ? 'source' : $usageKind;
+    $mediaId = captionerner_store_upload($pdo, $uploadFile, $usageKind, $label, $adminId);
     captionerner_log_activity($pdo, 'admin_media_uploaded', 'Admin uploaded media', [
       'user_id' => $adminId,
       'user_email' => $adminEmail,
-      'details' => ['media_id' => $mediaId, 'usage_kind' => $usageKind],
+      'details' => ['media_id' => $mediaId, 'usage_kind' => $effectiveUsageKind],
     ]);
-    captionerner_json_out(['ok' => true, 'media_id' => $mediaId]);
+    captionerner_json_out(['ok' => true, 'media_id' => $mediaId, 'usage_kind' => $effectiveUsageKind]);
   }
 
   if ($action === 'media_delete') {
