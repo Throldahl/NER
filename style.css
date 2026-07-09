@@ -130,7 +130,8 @@ h1 {
 
 #form-section,
 #countdown-section,
-#video-section {
+#video-section,
+#completion-section {
   margin-bottom: 18px;
 }
 
@@ -432,6 +433,25 @@ h2 {
   transition: width 140ms linear;
 }
 
+.completion-card {
+  text-align: center;
+}
+
+.completion-mark {
+  width: 54px;
+  height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  color: #052e1b;
+  background: rgba(167, 243, 208, 0.9);
+  box-shadow: 0 0 30px rgba(167, 243, 208, 0.2);
+  font-size: 1.8rem;
+  font-weight: 900;
+}
+
 /* Bigger visualizer for assessment playback */
 .visualizer--big {
   height: 46px;
@@ -603,6 +623,22 @@ h2 {
   padding: 20px;
 }
 
+.app-modal {
+  width: min(860px, 92vw);
+}
+
+.modal-body {
+  color: var(--muted);
+}
+
+.modal-body p {
+  color: var(--muted);
+}
+
+.modal-actions {
+  justify-content: flex-end;
+}
+
 .modal:not(.hidden) {
   animation: modalIn 180ms ease-out;
 }
@@ -634,6 +670,10 @@ h2 {
 .modal .btn--primary {
   width: 100%;
   font-weight: 800;
+}
+
+.app-modal .modal-actions .btn--primary {
+  width: auto;
 }
 
 .modal-close {
@@ -853,6 +893,132 @@ th {
   font-size: 0.85rem;
   color: var(--muted2);
   margin-top: 6px;
+}
+
+.user-filter-row {
+  align-items: end;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.user-filter-row > div {
+  min-width: min(210px, 100%);
+}
+
+.upload-progress {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.upload-progress-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.upload-progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.upload-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(125, 211, 252, 0.7),
+    rgba(167, 243, 208, 0.65)
+  );
+  transition: width 140ms ease;
+}
+
+.toast-region {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1200;
+  display: grid;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+}
+
+.toast {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  animation: toastIn 180ms ease-out;
+}
+
+.toast--success {
+  border-color: rgba(167, 243, 208, 0.38);
+}
+
+.toast--error {
+  border-color: rgba(251, 113, 133, 0.44);
+}
+
+.toast--leaving {
+  animation: toastOut 180ms ease-in forwards;
+}
+
+.test-preview {
+  display: grid;
+  gap: 14px;
+}
+
+.preview-section {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.preview-section h4 {
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.preview-media,
+.preview-audio {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.preview-media {
+  max-height: 46vh;
+  object-fit: contain;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 /* Snow overlay (subtle, optional) */

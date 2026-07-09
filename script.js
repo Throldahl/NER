@@ -24,11 +24,14 @@ const assessmentApp = byId("assessmentApp");
 const instructionsContent = byId("instructionsContent");
 const prepContent = byId("prepContent");
 
+const formSection = byId("form-section");
 const startBtn = byId("startBtn");
 const errorMessage = byId("error-message");
 const countdownSection = byId("countdown-section");
 const countdownSpan = byId("countdown");
 const videoSection = byId("video-section");
+const completionSection = byId("completion-section");
+const completionTime = byId("completionTime");
 const assessmentAudio = byId("assessmentAudio");
 const assessmentVideo = byId("assessmentVideo");
 const progressFill = byId("progressFill");
@@ -65,6 +68,11 @@ const newUserRole = byId("newUserRole");
 const newUserTest = byId("newUserTest");
 const bulk3PlayTest = byId("bulk3PlayTest");
 const bulk3PlayAssignBtn = byId("bulk3PlayAssignBtn");
+const userSearch = byId("userSearch");
+const userRoleFilter = byId("userRoleFilter");
+const userStatusFilter = byId("userStatusFilter");
+const userTestFilter = byId("userTestFilter");
+const userCompletedFilter = byId("userCompletedFilter");
 
 const testForm = byId("testForm");
 const testIdInput = byId("testId");
@@ -81,6 +89,19 @@ const mediaLabel = byId("mediaLabel");
 const mediaUsage = byId("mediaUsage");
 const mediaFile = byId("mediaFile");
 const mediaHelp = byId("mediaHelp");
+const mediaUploadBtn = byId("mediaUploadBtn");
+const uploadProgress = byId("uploadProgress");
+const uploadProgressLabel = byId("uploadProgressLabel");
+const uploadProgressPercent = byId("uploadProgressPercent");
+const uploadProgressFill = byId("uploadProgressFill");
+
+const toastRegion = byId("toastRegion");
+const appModalOverlay = byId("appModalOverlay");
+const appModal = byId("appModal");
+const appModalTitle = byId("appModalTitle");
+const appModalBody = byId("appModalBody");
+const appModalActions = byId("appModalActions");
+const appModalClose = byId("appModalClose");
 
 let appConfig = {
   google_client_id: "",
@@ -98,8 +119,10 @@ let currentTest = null;
 let sessionId = null;
 let adminTests = [];
 let adminMedia = [];
+let adminUsers = [];
 let countdownInterval = null;
 let googleRenderAttempted = false;
+let modalResolver = null;
 
 const pageLoadMs = Date.now();
 let firstFocusMs = null;
@@ -138,22 +161,43 @@ async function postJSON(url, payload) {
   }
 }
 
-async function postForm(url, formData) {
-  const res = await fetch(url, {
-    method: "POST",
-    credentials: "same-origin",
-    body: formData,
-  });
-  const text = await res.text();
-  try {
-    return { ok: res.ok, status: res.status, data: JSON.parse(text) };
-  } catch {
-    return {
-      ok: false,
-      status: res.status,
-      data: { error: "Non-JSON response", raw: text },
+function postFormWithProgress(url, formData, onProgress) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || typeof onProgress !== "function") return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
     };
-  }
+
+    xhr.onload = () => {
+      try {
+        resolve({
+          ok: xhr.status >= 200 && xhr.status < 300,
+          status: xhr.status,
+          data: JSON.parse(xhr.responseText || "{}"),
+        });
+      } catch {
+        resolve({
+          ok: false,
+          status: xhr.status,
+          data: { error: "Non-JSON response", raw: xhr.responseText || "" },
+        });
+      }
+    };
+
+    xhr.onerror = () => {
+      resolve({
+        ok: false,
+        status: 0,
+        data: { error: "Network error" },
+      });
+    };
+
+    xhr.send(formData);
+  });
 }
 
 function toLowerEmail(value) {
@@ -227,6 +271,13 @@ function serverUploadLimitBytes() {
   return limits.length ? Math.min(...limits) : 0;
 }
 
+function setUploadProgress(visible, percent = 0, label = "Uploading...") {
+  uploadProgress.classList.toggle("hidden", !visible);
+  uploadProgressLabel.textContent = label;
+  uploadProgressPercent.textContent = `${Math.max(0, Math.min(100, percent))}%`;
+  uploadProgressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+}
+
 function badgeYesNo(val) {
   const yes =
     !!val && (val === true || val === 1 || val === "1" || val === "yes");
@@ -256,6 +307,90 @@ function responseMessage(data, fallback) {
   if (data.error) return data.error;
   return fallback;
 }
+
+function notify(message, type = "info") {
+  if (!message) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast--${type}`;
+  toast.textContent = message;
+  toastRegion.appendChild(toast);
+
+  window.setTimeout(() => {
+    toast.classList.add("toast--leaving");
+    window.setTimeout(() => toast.remove(), 180);
+  }, type === "error" ? 5200 : 3400);
+}
+
+function closeAppModal(result = null) {
+  appModal.classList.add("hidden");
+  appModalOverlay.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  appModalBody.innerHTML = "";
+  appModalActions.innerHTML = "";
+  if (modalResolver) {
+    const resolve = modalResolver;
+    modalResolver = null;
+    resolve(result);
+  }
+}
+
+function showAppModal({ title, bodyHtml, actions = [] }) {
+  appModalTitle.textContent = title || "";
+  appModalBody.innerHTML = bodyHtml || "";
+  appModalActions.innerHTML = "";
+
+  const modalActions = actions.length
+    ? actions
+    : [{ label: "Close", value: null, className: "btn--primary" }];
+
+  modalActions.forEach((action) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = action.className || "btn--ghost";
+    btn.textContent = action.label;
+    btn.addEventListener("click", () => closeAppModal(action.value));
+    appModalActions.appendChild(btn);
+  });
+
+  document.body.classList.add("modal-open");
+  appModalOverlay.classList.remove("hidden");
+  appModal.classList.remove("hidden");
+  appModal.querySelector("button")?.focus();
+
+  return new Promise((resolve) => {
+    modalResolver = resolve;
+  });
+}
+
+function confirmAction(message, options = {}) {
+  const {
+    title = "Confirm",
+    confirmLabel = "Continue",
+    cancelLabel = "Cancel",
+    danger = false,
+  } = options;
+
+  return showAppModal({
+    title,
+    bodyHtml: `<p>${escapeHtml(message)}</p>`,
+    actions: [
+      { label: cancelLabel, value: false, className: "btn--ghost" },
+      {
+        label: confirmLabel,
+        value: true,
+        className: danger ? "btn--danger" : "btn--primary",
+      },
+    ],
+  });
+}
+
+appModalClose.addEventListener("click", () => closeAppModal(null));
+appModalOverlay.addEventListener("click", () => closeAppModal(null));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !appModal.classList.contains("hidden")) {
+    closeAppModal(null);
+  }
+});
 
 function pageIsActive() {
   return document.visibilityState === "visible" && document.hasFocus();
@@ -427,13 +562,25 @@ function resetAssessmentState() {
   startClickedMs = null;
   countdownSection.classList.add("hidden");
   videoSection.classList.add("hidden");
-  byId("form-section").classList.remove("hidden");
+  completionSection.classList.add("hidden");
+  completionTime.textContent = "";
+  formSection.classList.remove("hidden");
   startBtn.disabled = false;
   progressFill.style.width = "0%";
   timeCurrent.textContent = "0:00";
   timeTotal.textContent = "--:--";
   stopBars();
   stopAssessmentBars();
+}
+
+function showCompletion(recorded = true) {
+  formSection.classList.add("hidden");
+  countdownSection.classList.add("hidden");
+  videoSection.classList.add("hidden");
+  completionSection.classList.remove("hidden");
+  completionTime.textContent = recorded
+    ? `Recorded ${new Date().toLocaleString()}`
+    : "The media ended, but completion could not be confirmed. Please contact your coordinator.";
 }
 
 function renderCurrentTest(test) {
@@ -688,13 +835,25 @@ function playAssessmentMedia() {
   media.onended = async () => {
     stopAssessmentBars();
     progressFill.style.width = "100%";
-    alert("Assessment media has ended.");
+    let recorded = false;
     if (sessionId) {
-      await postJSON(API_METRICS, {
-        action: "video_ended",
-        session_id: sessionId,
-      });
+      try {
+        const r = await postJSON(API_METRICS, {
+          action: "video_ended",
+          session_id: sessionId,
+        });
+        recorded = !!(r.ok && r.data && r.data.ok);
+      } catch {
+        recorded = false;
+      }
     }
+    showCompletion(recorded);
+    notify(
+      recorded
+        ? "Assessment completed. Your completion has been recorded."
+        : "Assessment ended, but completion could not be confirmed.",
+      recorded ? "success" : "error",
+    );
   };
 
   media.play().catch(() => {
@@ -721,7 +880,8 @@ startBtn.addEventListener("click", async () => {
     countdown_cancelled: 0,
   });
 
-  byId("form-section").classList.add("hidden");
+  formSection.classList.add("hidden");
+  completionSection.classList.add("hidden");
   countdownSection.classList.remove("hidden");
   testAudio.pause();
   stopBars();
@@ -753,7 +913,7 @@ startBtn.addEventListener("click", async () => {
 cancelCountdownBtn.addEventListener("click", async () => {
   clearInterval(countdownInterval);
   countdownSection.classList.add("hidden");
-  byId("form-section").classList.remove("hidden");
+  formSection.classList.remove("hidden");
   startBtn.disabled = false;
   await updatePrestartOnServer({ countdown_cancelled: 1 });
   startClickedMs = null;
@@ -817,6 +977,11 @@ adminRefreshBtn.addEventListener("click", async () => {
 
 metricsTestFilter.addEventListener("change", loadMetrics);
 activityTestFilter.addEventListener("change", loadActivity);
+userSearch.addEventListener("input", renderUsersTable);
+userRoleFilter.addEventListener("change", renderUsersTable);
+userStatusFilter.addEventListener("change", renderUsersTable);
+userTestFilter.addEventListener("change", renderUsersTable);
+userCompletedFilter.addEventListener("change", renderUsersTable);
 
 async function loadAdminReferenceData() {
   const [testsRes, mediaRes] = await Promise.all([
@@ -857,11 +1022,29 @@ function populateMediaSelect(select, usageKind, selected = "") {
   select.innerHTML = options.join("");
 }
 
+function populateUserTestFilter() {
+  const value = userTestFilter.value || "0";
+  const options = [
+    `<option value="0">All tests</option>`,
+    `<option value="__unassigned">Unassigned</option>`,
+  ];
+  adminTests.forEach((test) => {
+    options.push(
+      `<option value="${test.id}" ${String(test.id) === value ? "selected" : ""}>${escapeHtml(test.title)}</option>`,
+    );
+  });
+  userTestFilter.innerHTML = options.join("");
+  userTestFilter.value = [...userTestFilter.options].some((opt) => opt.value === value)
+    ? value
+    : "0";
+}
+
 function populateAllSelects() {
   populateTestSelect(metricsTestFilter, metricsTestFilter.value, true);
   populateTestSelect(activityTestFilter, activityTestFilter.value, true);
   populateTestSelect(newUserTest, newUserTest.value, false);
   populateTestSelect(bulk3PlayTest, bulk3PlayTest.value, false, "Choose a test");
+  populateUserTestFilter();
   populateMediaSelect(testAudioSelect, "test_audio", testAudioSelect.value);
   populateMediaSelect(sourceMediaSelect, "source", sourceMediaSelect.value);
 }
@@ -946,21 +1129,54 @@ async function loadActivity() {
 }
 
 async function loadUsers() {
-  usersBody.innerHTML = `<tr><td colspan="7" class="subtle">Loading...</td></tr>`;
+  usersBody.innerHTML = `<tr><td colspan="8" class="subtle">Loading...</td></tr>`;
   const r = await postJSON(API_ADMIN, { action: "users_list", limit: 2000 });
   if (!r.ok || !r.data || !r.data.ok) {
-    usersBody.innerHTML = `<tr><td colspan="7" style="color:#fecaca">Failed to load users.</td></tr>`;
+    usersBody.innerHTML = `<tr><td colspan="8" style="color:#fecaca">Failed to load users.</td></tr>`;
     return;
   }
-  const users = r.data.users || [];
+  adminUsers = r.data.users || [];
+  renderUsersTable();
+}
+
+function filteredUsers() {
+  const query = toLowerEmail(userSearch.value);
+  const role = userRoleFilter.value;
+  const status = userStatusFilter.value;
+  const testId = userTestFilter.value || "0";
+  const completed = userCompletedFilter.value;
+
+  return adminUsers.filter((u) => {
+    const active = Number(u.is_active) === 1;
+    const hasCompleted = Number(u.has_completed) === 1;
+    if (query && !toLowerEmail(u.email).includes(query)) return false;
+    if (role && u.role !== role) return false;
+    if (status === "active" && !active) return false;
+    if (status === "inactive" && active) return false;
+    if (testId === "__unassigned" && u.test_id) return false;
+    if (testId !== "0" && testId !== "__unassigned" && String(u.test_id || "") !== testId) return false;
+    if (completed === "yes" && !hasCompleted) return false;
+    if (completed === "no" && hasCompleted) return false;
+    return true;
+  });
+}
+
+function renderUsersTable() {
+  if (!adminUsers.length) {
+    usersBody.innerHTML = `<tr><td colspan="8" class="subtle">No users found.</td></tr>`;
+    return;
+  }
+
+  const users = filteredUsers();
   if (!users.length) {
-    usersBody.innerHTML = `<tr><td colspan="7" class="subtle">No users found.</td></tr>`;
+    usersBody.innerHTML = `<tr><td colspan="8" class="subtle">No users match these filters.</td></tr>`;
     return;
   }
 
   usersBody.innerHTML = users
     .map((u) => {
       const active = Number(u.is_active) === 1;
+      const hasCompleted = Number(u.has_completed) === 1;
       return `
         <tr data-userid="${u.id}">
           <td>${escapeHtml(u.email)}</td>
@@ -977,6 +1193,7 @@ async function loadUsers() {
               <option value="0" ${!active ? "selected" : ""}>Inactive</option>
             </select>
           </td>
+          <td>${badgeYesNo(hasCompleted)}</td>
           <td>${fmtTs(u.last_login_at)}</td>
           <td>${fmtTs(u.created_at)}</td>
           <td>
@@ -1017,9 +1234,10 @@ usersBody.addEventListener("click", async (e) => {
   });
   btn.disabled = false;
   if (!r.ok || !r.data || !r.data.ok) {
-    alert((r.data && (r.data.message || r.data.error)) || "User update failed.");
+    notify(responseMessage(r.data, "User update failed."), "error");
     return;
   }
+  notify("User updated.", "success");
   await loadUsers();
 });
 
@@ -1035,12 +1253,13 @@ addUserForm.addEventListener("submit", async (e) => {
     test_id: testId,
   });
   if (!r.ok || !r.data || !r.data.ok) {
-    alert((r.data && (r.data.message || r.data.error)) || "Failed to add user.");
+    notify(responseMessage(r.data, "Failed to add user."), "error");
     return;
   }
   newUserEmail.value = "";
   newUserRole.value = "captioner";
   newUserTest.value = "";
+  notify("User added or reactivated.", "success");
   await loadUsers();
 });
 
@@ -1048,11 +1267,18 @@ bulk3PlayAssignBtn.addEventListener("click", async () => {
   const testId = bulk3PlayTest.value || "";
   const test = adminTests.find((t) => String(t.id) === String(testId));
   if (!testId || !test) {
-    alert("Choose a test first.");
+    notify("Choose a test first.", "error");
     return;
   }
 
-  if (!confirm(`Assign all @${appConfig.google_required_domain} users to "${test.title}"?`)) {
+  const confirmed = await confirmAction(
+    `Assign all @${appConfig.google_required_domain} users to "${test.title}"?`,
+    {
+      title: "Bulk Assign Users",
+      confirmLabel: "Assign Users",
+    },
+  );
+  if (!confirmed) {
     return;
   }
 
@@ -1064,16 +1290,70 @@ bulk3PlayAssignBtn.addEventListener("click", async () => {
   bulk3PlayAssignBtn.disabled = false;
 
   if (!r.ok || !r.data || !r.data.ok) {
-    alert((r.data && (r.data.message || r.data.error)) || "Bulk assignment failed.");
+    notify(responseMessage(r.data, "Bulk assignment failed."), "error");
     return;
   }
 
   const matched = Number(r.data.matched_count || 0);
   const changed = Number(r.data.changed_count || 0);
-  alert(`Assigned "${test.title}" to ${matched} @${appConfig.google_required_domain} user(s). ${changed} row(s) changed.`);
+  notify(`Assigned "${test.title}" to ${matched} @${appConfig.google_required_domain} user(s). ${changed} row(s) changed.`, "success");
   await loadAdminReferenceData();
   await loadUsers();
 });
+
+function mediaById(id) {
+  return adminMedia.find((media) => String(media.id) === String(id || ""));
+}
+
+function mediaPreviewMarkup(media, label) {
+  if (!media || !media.file_path) {
+    return `<p class="subtle">No ${escapeHtml(label)} selected.</p>`;
+  }
+
+  const source = escapeHtml(media.file_path);
+  const title = escapeHtml(media.label || media.original_name || label);
+  if (media.media_kind === "video") {
+    return `
+      <p class="subtle">${title}</p>
+      <video class="preview-media" controls preload="metadata" src="${source}"></video>
+    `;
+  }
+
+  return `
+    <p class="subtle">${title}</p>
+    <audio class="preview-audio" controls preload="metadata" src="${source}"></audio>
+  `;
+}
+
+function previewTest(test) {
+  const testAudio = mediaById(test.test_audio_media_id);
+  const sourceMedia = mediaById(test.source_media_id);
+  showAppModal({
+    title: `Preview: ${test.title || "Untitled Test"}`,
+    bodyHtml: `
+      <div class="test-preview">
+        ${test.subtitle ? `<p class="subtle">${escapeHtml(test.subtitle)}</p>` : ""}
+        <div class="preview-section">
+          <h4>Instructions</h4>
+          <div class="rich-content">${test.instructions_html || ""}</div>
+        </div>
+        <div class="preview-section">
+          <h4>Prep</h4>
+          <div class="rich-content">${test.prep_html || ""}</div>
+        </div>
+        <div class="preview-section">
+          <h4>Test Audio</h4>
+          ${mediaPreviewMarkup(testAudio, "test audio")}
+        </div>
+        <div class="preview-section">
+          <h4>Assessment Source</h4>
+          ${mediaPreviewMarkup(sourceMedia, "assessment source")}
+        </div>
+      </div>
+    `,
+    actions: [{ label: "Close", value: null, className: "btn--primary" }],
+  });
+}
 
 function renderTestsTable() {
   if (!adminTests.length) {
@@ -1091,6 +1371,7 @@ function renderTestsTable() {
           <td>${fmtTs(test.updated_at || test.created_at)}</td>
           <td>
             <div class="table-actions">
+              <button class="btn--ghost small" type="button" data-action="preview-test" data-testid="${test.id}">Preview</button>
               <button class="btn--ghost small" type="button" data-action="edit-test" data-testid="${test.id}">Edit</button>
               <button class="btn--danger small" type="button" data-action="delete-test" data-testid="${test.id}">Delete</button>
             </div>
@@ -1121,6 +1402,11 @@ testsBody.addEventListener("click", async (e) => {
   const test = adminTests.find((t) => Number(t.id) === id);
   if (!test) return;
 
+  if (action === "preview-test") {
+    previewTest(test);
+    return;
+  }
+
   if (action === "edit-test") {
     testIdInput.value = test.id;
     testTitle.value = test.title || "";
@@ -1134,7 +1420,12 @@ testsBody.addEventListener("click", async (e) => {
   }
 
   if (action === "delete-test") {
-    if (!confirm(`Delete "${test.title}"?`)) return;
+    const confirmed = await confirmAction(`Delete "${test.title}"?`, {
+      title: "Delete Test",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     btn.disabled = true;
     let r = await postJSON(API_ADMIN, {
       action: "tests_delete",
@@ -1143,22 +1434,35 @@ testsBody.addEventListener("click", async (e) => {
     if (
       r.status === 409 &&
       r.data &&
-      r.data.requires_confirm &&
-      confirm(`${r.data.message}\n\nDelete anyway and set those users to unassigned?`)
+      r.data.requires_confirm
     ) {
-      r = await postJSON(API_ADMIN, {
-        action: "tests_delete",
-        test_id: id,
-        force: 1,
-      });
+      const forceDelete = await confirmAction(
+        `${r.data.message} Delete anyway and set those users to unassigned?`,
+        {
+          title: "Test Is Assigned",
+          confirmLabel: "Delete Anyway",
+          danger: true,
+        },
+      );
+      if (forceDelete) {
+        r = await postJSON(API_ADMIN, {
+          action: "tests_delete",
+          test_id: id,
+          force: 1,
+        });
+      } else {
+        btn.disabled = false;
+        return;
+      }
     }
     btn.disabled = false;
     if (!r.ok || !r.data || !r.data.ok) {
-      alert((r.data && (r.data.message || r.data.error)) || "Delete failed.");
+      notify(responseMessage(r.data, "Delete failed."), "error");
       return;
     }
     await loadAdminReferenceData();
     renderTestsTable();
+    notify("Test deleted.", "success");
   }
 });
 
@@ -1176,12 +1480,13 @@ testForm.addEventListener("submit", async (e) => {
   };
   const r = await postJSON(API_ADMIN, payload);
   if (!r.ok || !r.data || !r.data.ok) {
-    alert((r.data && (r.data.message || r.data.error)) || "Failed to save test.");
+    notify(responseMessage(r.data, "Failed to save test."), "error");
     return;
   }
   clearTestForm();
   await loadAdminReferenceData();
   renderTestsTable();
+  notify("Test saved.", "success");
 });
 
 document.querySelectorAll(".editor-toolbar button[data-command]").forEach((btn) => {
@@ -1225,7 +1530,7 @@ function renderMediaTable() {
 mediaUploadForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!mediaFile.files || !mediaFile.files[0]) {
-    alert("Choose a media file to upload.");
+    notify("Choose a media file to upload.", "error");
     return;
   }
   const file = mediaFile.files[0];
@@ -1234,16 +1539,16 @@ mediaUploadForm.addEventListener("submit", async (e) => {
   const ext = fileExtension(file);
   const rules = uploadRulesForUsage(usage);
   if (!rules.extensions.includes(ext)) {
-    alert(`Unsupported file type for ${usage === "source" ? "Assessment source" : "Test Audio button"}. Allowed: ${rules.extensions.join(", ")}.`);
+    notify(`Unsupported file type for ${usage === "source" ? "Assessment source" : "Test Audio button"}. Allowed: ${rules.extensions.join(", ")}.`, "error");
     return;
   }
   if (rules.appMaxBytes > 0 && file.size > rules.appMaxBytes) {
-    alert(`This file is too large for this upload type. Limit: ${fmtBytes(rules.appMaxBytes)}.`);
+    notify(`This file is too large for this upload type. Limit: ${fmtBytes(rules.appMaxBytes)}.`, "error");
     return;
   }
   const serverMaxBytes = serverUploadLimitBytes();
   if (serverMaxBytes > 0 && file.size > serverMaxBytes) {
-    alert(`This file is larger than the server upload limit of ${fmtBytes(serverMaxBytes)}. Increase Hostinger/PHP upload limits or choose a smaller file.`);
+    notify(`This file is larger than the server upload limit of ${fmtBytes(serverMaxBytes)}. Increase Hostinger/PHP upload limits or choose a smaller file.`, "error");
     return;
   }
 
@@ -1252,15 +1557,26 @@ mediaUploadForm.addEventListener("submit", async (e) => {
   formData.append("label", mediaLabel.value);
   formData.append("usage_kind", usage);
   formData.append("media_file", file);
-  const r = await postForm(API_ADMIN, formData);
+  mediaUploadBtn.disabled = true;
+  mediaUploadBtn.textContent = "Uploading...";
+  setUploadProgress(true, 0, `Uploading ${file.name}`);
+  const r = await postFormWithProgress(API_ADMIN, formData, (percent) => {
+    setUploadProgress(true, percent, `Uploading ${file.name}`);
+  });
+  mediaUploadBtn.disabled = false;
+  mediaUploadBtn.textContent = "Upload";
   if (!r.ok || !r.data || !r.data.ok) {
-    alert(responseMessage(r.data, "Upload failed."));
+    setUploadProgress(false);
+    notify(responseMessage(r.data, "Upload failed."), "error");
     return;
   }
+  setUploadProgress(true, 100, "Upload complete");
   mediaLabel.value = "";
   mediaFile.value = "";
   await loadAdminReferenceData();
   renderMediaTable();
+  notify("Media uploaded.", "success");
+  window.setTimeout(() => setUploadProgress(false), 900);
 });
 
 mediaFile.addEventListener("change", () => {
@@ -1273,7 +1589,12 @@ mediaFile.addEventListener("change", () => {
 mediaBody.addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-action='delete-media']");
   if (!btn) return;
-  if (!confirm("Delete this uploaded media file?")) return;
+  const confirmed = await confirmAction("Delete this uploaded media file?", {
+    title: "Delete Media",
+    confirmLabel: "Delete",
+    danger: true,
+  });
+  if (!confirmed) return;
   btn.disabled = true;
   const r = await postJSON(API_ADMIN, {
     action: "media_delete",
@@ -1281,11 +1602,12 @@ mediaBody.addEventListener("click", async (e) => {
   });
   btn.disabled = false;
   if (!r.ok || !r.data || !r.data.ok) {
-    alert((r.data && (r.data.message || r.data.error)) || "Delete failed.");
+    notify(responseMessage(r.data, "Delete failed."), "error");
     return;
   }
   await loadAdminReferenceData();
   renderMediaTable();
+  notify("Media deleted.", "success");
 });
 
 (async function init() {

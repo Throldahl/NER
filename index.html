@@ -3,7 +3,7 @@
   <head>
     <title>Captioner NER Testing</title>
     <link rel="icon" type="image/png" href="favicon-32x32.svg" sizes="32x32" />
-    <link rel="stylesheet" href="style.css?v=2.20" />
+    <link rel="stylesheet" href="style.css?v=2.30" />
 
     <script
       src="https://code.jquery.com/jquery-3.7.1.js"
@@ -11,7 +11,7 @@
       crossorigin="anonymous"
     ></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script defer src="script.js?v=2.22"></script>
+    <script defer src="script.js?v=2.30"></script>
 
     <meta name="robots" content="noindex" />
     <meta name="author" content="Derek Throldahl" />
@@ -206,6 +206,16 @@
               <audio id="assessmentAudio" preload="auto"></audio>
             </div>
           </section>
+
+          <section id="completion-section" class="card completion-card hidden">
+            <div class="completion-mark" aria-hidden="true">&#10003;</div>
+            <h2>Assessment Completed</h2>
+            <p>
+              Your completion has been recorded. You may close this page or
+              log out.
+            </p>
+            <p id="completionTime" class="subtle"></p>
+          </section>
         </div>
       </div>
 
@@ -307,6 +317,46 @@
           </div>
 
           <div id="usersTab" class="hidden">
+            <div class="admin-filter-row user-filter-row">
+              <div>
+                <label for="userSearch">Search users</label>
+                <input
+                  id="userSearch"
+                  type="text"
+                  placeholder="Email address"
+                  autocomplete="off"
+                />
+              </div>
+              <div>
+                <label for="userRoleFilter">Role</label>
+                <select id="userRoleFilter">
+                  <option value="">All roles</option>
+                  <option value="captioner">captioner</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+              <div>
+                <label for="userStatusFilter">Status</label>
+                <select id="userStatusFilter">
+                  <option value="">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              <div>
+                <label for="userTestFilter">Assigned test</label>
+                <select id="userTestFilter"></select>
+              </div>
+              <div>
+                <label for="userCompletedFilter">Completed</label>
+                <select id="userCompletedFilter">
+                  <option value="">All</option>
+                  <option value="yes">Completed</option>
+                  <option value="no">Not completed</option>
+                </select>
+              </div>
+            </div>
+
             <form id="addUserForm" class="admin-form" autocomplete="off">
               <div>
                 <label for="newUserEmail">Email</label>
@@ -357,6 +407,7 @@
                     <th>Role</th>
                     <th>Assigned Test</th>
                     <th>Status</th>
+                    <th>Completed</th>
                     <th>Last Login</th>
                     <th>Created</th>
                     <th>Action</th>
@@ -364,7 +415,7 @@
                 </thead>
                 <tbody id="usersBody">
                   <tr>
-                    <td colspan="7" class="subtle">No data loaded yet.</td>
+                    <td colspan="8" class="subtle">No data loaded yet.</td>
                   </tr>
                 </tbody>
               </table>
@@ -473,9 +524,20 @@
               </div>
               <div>
                 <label>&nbsp;</label>
-                <button class="btn--primary" type="submit">Upload</button>
+                <button id="mediaUploadBtn" class="btn--primary" type="submit">
+                  Upload
+                </button>
               </div>
             </form>
+            <div id="uploadProgress" class="upload-progress hidden">
+              <div class="upload-progress-top">
+                <span id="uploadProgressLabel">Uploading...</span>
+                <span id="uploadProgressPercent">0%</span>
+              </div>
+              <div class="upload-progress-track">
+                <div id="uploadProgressFill" class="upload-progress-fill"></div>
+              </div>
+            </div>
             <div id="mediaHelp" class="help"></div>
             <div class="table-wrap" style="margin-top: 10px">
               <table>
@@ -501,5 +563,25 @@
         </div>
       </section>
     </main>
+
+    <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+    <div id="appModalOverlay" class="overlay hidden"></div>
+    <div
+      id="appModal"
+      class="modal app-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="appModalTitle"
+    >
+      <div class="modal-top">
+        <h3 id="appModalTitle"></h3>
+        <button id="appModalClose" class="modal-close" type="button">
+          &times;
+        </button>
+      </div>
+      <div id="appModalBody" class="modal-body"></div>
+      <div id="appModalActions" class="btn-row modal-actions"></div>
+    </div>
   </body>
 </html>

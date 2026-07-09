@@ -278,7 +278,14 @@ try {
         u.test_id,
         u.last_login_at,
         u.created_at,
-        t.title AS test_title
+        t.title AS test_title,
+        EXISTS (
+          SELECT 1
+          FROM captionerner_assessments a
+          WHERE a.user_id = u.id
+            AND (a.video_ended_at IS NOT NULL OR a.completed_at IS NOT NULL)
+          LIMIT 1
+        ) AS has_completed
       FROM captionerner_users u
       LEFT JOIN captionerner_tests t ON t.id = u.test_id
       ORDER BY u.email ASC
