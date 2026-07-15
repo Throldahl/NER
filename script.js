@@ -3,6 +3,7 @@
 const API_AUTH = "api_auth.php";
 const API_METRICS = "api_metrics.php";
 const API_ADMIN = "api_admin.php";
+const ADMIN_TEST_FILTER_KEY = "captionerner.admin.selectedTestFilter";
 
 const byId = (id) => document.getElementById(id);
 
@@ -120,9 +121,18 @@ let sessionId = null;
 let adminTests = [];
 let adminMedia = [];
 let adminUsers = [];
+let metricsRows = [];
+let activityEvents = [];
 let countdownInterval = null;
 let googleRenderAttempted = false;
 let modalResolver = null;
+const sortState = {
+  metrics: { key: "email", dir: "asc" },
+  activity: { key: "created_at", dir: "asc" },
+  users: { key: "email", dir: "asc" },
+  tests: { key: "title", dir: "asc" },
+  media: { key: "label", dir: "asc" },
+};
 
 const pageLoadMs = Date.now();
 let firstFocusMs = null;
@@ -320,6 +330,30 @@ function responseMessage(data, fallback) {
   return fallback;
 }
 
+function storageGet(key, fallback = "") {
+  try {
+    return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // Ignore private browsing or storage-disabled environments.
+  }
+}
+
+function savedAdminTestFilter() {
+  return storageGet(ADMIN_TEST_FILTER_KEY, "0") || "0";
+}
+
+function saveAdminTestFilter(value) {
+  storageSet(ADMIN_TEST_FILTER_KEY, value || "0");
+}
+
 function notify(message, type = "info") {
   if (!message) return;
   const toast = document.createElement("div");
@@ -403,6 +437,133 @@ document.addEventListener("keydown", (e) => {
     closeAppModal(null);
   }
 });
+
+function metricStatus(row) {
+  if (!row || !row.created_at) return "Not started";
+  if (Number(row.countdown_cancelled) === 1 && !row.video_started_at) return "Cancelled";
+  if (row.video_ended_at || row.completed_at) return "Finished";
+  if (row.video_started_at) return "In progress";
+  if (row.start_clicked_at) return "Started";
+  return "Loaded";
+}
+
+function metricStatusRank(row) {
+  const status = metricStatus(row);
+  return {
+    "Not started": 0,
+    Loaded: 1,
+    Cancelled: 2,
+    Started: 3,
+    "In progress": 4,
+    Finished: 5,
+  }[status] ?? 0;
+}
+
+function timestampValue(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const normalized = raw.replace(" ", "T");
+  const d = new Date(hasZone ? normalized : `${normalized}Z`);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
+
+function boolValue(value) {
+  return value === true || value === 1 || value === "1" || value === "yes" ? 1 : 0;
+}
+
+function sortValue(table, row, key, type) {
+  if (table === "metrics") {
+    if (key === "status") return metricStatusRank(row);
+    if (key === "completed") return boolValue(row.video_ended_at || row.completed_at);
+  }
+  if (table === "tests" && key === "updated_at") {
+    return type === "date" ? timestampValue(row.updated_at || row.created_at) : row.updated_at || row.created_at;
+  }
+  if (type === "date") return timestampValue(row[key]);
+  if (type === "number") return Number(row[key] || 0);
+  if (type === "boolean") return boolValue(row[key]);
+  return String(row[key] ?? "").toLowerCase();
+}
+
+function sortRows(rows, table) {
+  const state = sortState[table];
+  if (!state || !state.key) return rows.slice();
+  const header = document.querySelector(
+    `th[data-sort-table="${table}"][data-sort-key="${state.key}"]`,
+  );
+  const type = header?.getAttribute("data-sort-type") || "text";
+  const dir = state.dir === "desc" ? -1 : 1;
+
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const av = sortValue(table, a.row, state.key, type);
+      const bv = sortValue(table, b.row, state.key, type);
+      const aEmpty = av === null || av === "";
+      const bEmpty = bv === null || bv === "";
+      if (aEmpty && bEmpty) return a.index - b.index;
+      if (aEmpty) return 1;
+      if (bEmpty) return -1;
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return a.index - b.index;
+    })
+    .map((item) => item.row);
+}
+
+function applySortIndicators() {
+  document.querySelectorAll("th[data-sort-table]").forEach((th) => {
+    const table = th.getAttribute("data-sort-table");
+    const key = th.getAttribute("data-sort-key");
+    const active = sortState[table]?.key === key;
+    th.classList.toggle("sortable", true);
+    th.classList.toggle("sort-asc", active && sortState[table].dir === "asc");
+    th.classList.toggle("sort-desc", active && sortState[table].dir === "desc");
+    th.setAttribute(
+      "aria-sort",
+      active ? (sortState[table].dir === "asc" ? "ascending" : "descending") : "none",
+    );
+  });
+}
+
+function defaultSortDirection(type) {
+  return type === "date" || type === "number" || type === "boolean" ? "desc" : "asc";
+}
+
+function rerenderSortedTable(table) {
+  if (table === "metrics") renderMetricsTable();
+  if (table === "activity") renderActivityTable();
+  if (table === "users") renderUsersTable();
+  if (table === "tests") renderTestsTable();
+  if (table === "media") renderMediaTable();
+}
+
+function initSortableHeaders() {
+  document.querySelectorAll("th[data-sort-table]").forEach((th) => {
+    th.tabIndex = 0;
+    th.addEventListener("click", () => {
+      const table = th.getAttribute("data-sort-table");
+      const key = th.getAttribute("data-sort-key");
+      const type = th.getAttribute("data-sort-type") || "text";
+      if (!table || !key || !sortState[table]) return;
+      if (sortState[table].key === key) {
+        sortState[table].dir = sortState[table].dir === "asc" ? "desc" : "asc";
+      } else {
+        sortState[table] = { key, dir: defaultSortDirection(type) };
+      }
+      applySortIndicators();
+      rerenderSortedTable(table);
+    });
+    th.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        th.click();
+      }
+    });
+  });
+  applySortIndicators();
+}
 
 function pageIsActive() {
   return document.visibilityState === "visible" && document.hasFocus();
@@ -979,8 +1140,26 @@ adminRefreshBtn.addEventListener("click", async () => {
   await refreshActiveAdminTab();
 });
 
-metricsTestFilter.addEventListener("change", loadMetrics);
-activityTestFilter.addEventListener("change", loadActivity);
+function setSelectValueIfAvailable(select, value) {
+  const desired = String(value || "0");
+  select.value = [...select.options].some((opt) => opt.value === desired) ? desired : "0";
+}
+
+function syncAdminTestFilters(value) {
+  const next = String(value || "0");
+  saveAdminTestFilter(next);
+  setSelectValueIfAvailable(metricsTestFilter, next);
+  setSelectValueIfAvailable(activityTestFilter, next);
+}
+
+metricsTestFilter.addEventListener("change", () => {
+  syncAdminTestFilters(metricsTestFilter.value);
+  loadMetrics();
+});
+activityTestFilter.addEventListener("change", () => {
+  syncAdminTestFilters(activityTestFilter.value);
+  loadActivity();
+});
 userSearch.addEventListener("input", renderUsersTable);
 userRoleFilter.addEventListener("change", renderUsersTable);
 userStatusFilter.addEventListener("change", renderUsersTable);
@@ -1044,8 +1223,10 @@ function populateUserTestFilter() {
 }
 
 function populateAllSelects() {
-  populateTestSelect(metricsTestFilter, metricsTestFilter.value, true);
-  populateTestSelect(activityTestFilter, activityTestFilter.value, true);
+  const rememberedAdminTest = metricsTestFilter.value || savedAdminTestFilter();
+  populateTestSelect(metricsTestFilter, rememberedAdminTest, true);
+  populateTestSelect(activityTestFilter, activityTestFilter.value || rememberedAdminTest, true);
+  syncAdminTestFilters(metricsTestFilter.value || rememberedAdminTest);
   populateTestSelect(newUserTest, newUserTest.value, false);
   populateTestSelect(bulk3PlayTest, bulk3PlayTest.value, false, "Choose a test");
   populateUserTestFilter();
@@ -1065,23 +1246,20 @@ async function loadMetrics() {
     metricsBody.innerHTML = `<tr><td colspan="12" style="color:#fecaca">Failed to load metrics.</td></tr>`;
     return;
   }
-  const rows = r.data.rows || [];
-  if (!rows.length) {
+  metricsRows = r.data.rows || [];
+  renderMetricsTable();
+}
+
+function renderMetricsTable() {
+  if (!metricsRows.length) {
     metricsBody.innerHTML = `<tr><td colspan="12" class="subtle">No metrics found.</td></tr>`;
     return;
   }
 
-  metricsBody.innerHTML = rows
+  metricsBody.innerHTML = sortRows(metricsRows, "metrics")
     .map((s) => {
       const hasSession = !!s.created_at;
-      let status = "Not started";
-      if (hasSession) status = "Loaded";
-      if (s.start_clicked_at) status = "Started";
-      if (s.video_started_at) status = "In progress";
-      if (s.video_ended_at || s.completed_at) status = "Finished";
-      if (Number(s.countdown_cancelled) === 1 && !s.video_started_at) {
-        status = "Cancelled";
-      }
+      const status = metricStatus(s);
       return `
         <tr>
           <td>${escapeHtml(s.email)}</td>
@@ -1113,12 +1291,16 @@ async function loadActivity() {
     activityBody.innerHTML = `<tr><td colspan="4" style="color:#fecaca">Failed to load activity.</td></tr>`;
     return;
   }
-  const events = r.data.events || [];
-  if (!events.length) {
+  activityEvents = r.data.events || [];
+  renderActivityTable();
+}
+
+function renderActivityTable() {
+  if (!activityEvents.length) {
     activityBody.innerHTML = `<tr><td colspan="4" class="subtle">No activity found.</td></tr>`;
     return;
   }
-  activityBody.innerHTML = events
+  activityBody.innerHTML = sortRows(activityEvents, "activity")
     .map(
       (event) => `
         <tr>
@@ -1171,7 +1353,7 @@ function renderUsersTable() {
     return;
   }
 
-  const users = filteredUsers();
+  const users = sortRows(filteredUsers(), "users");
   if (!users.length) {
     usersBody.innerHTML = `<tr><td colspan="8" class="subtle">No users match these filters.</td></tr>`;
     return;
@@ -1364,7 +1546,7 @@ function renderTestsTable() {
     testsBody.innerHTML = `<tr><td colspan="6" class="subtle">No tests found.</td></tr>`;
     return;
   }
-  testsBody.innerHTML = adminTests
+  testsBody.innerHTML = sortRows(adminTests, "tests")
     .map(
       (test) => `
         <tr>
@@ -1507,7 +1689,7 @@ function renderMediaTable() {
     mediaBody.innerHTML = `<tr><td colspan="7" class="subtle">No media found.</td></tr>`;
     return;
   }
-  mediaBody.innerHTML = adminMedia
+  mediaBody.innerHTML = sortRows(adminMedia, "media")
     .map((media) => {
       const canDelete = Number(media.is_builtin) !== 1;
       return `
@@ -1615,6 +1797,7 @@ mediaBody.addEventListener("click", async (e) => {
 });
 
 (async function init() {
+  initSortableHeaders();
   updateFocusTracking();
   await loadConfig();
   const r = await postJSON(API_AUTH, { action: "whoami" });

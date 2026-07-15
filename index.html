@@ -3,7 +3,7 @@
   <head>
     <title>Captioner NER Testing</title>
     <link rel="icon" type="image/png" href="favicon-32x32.svg" sizes="32x32" />
-    <link rel="stylesheet" href="style.css?v=2.30" />
+    <link rel="stylesheet" href="style.css?v=2.31" />
 
     <script
       src="https://code.jquery.com/jquery-3.7.1.js"
@@ -11,7 +11,7 @@
       crossorigin="anonymous"
     ></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script defer src="script.js?v=2.30"></script>
+    <script defer src="script.js?v=2.31"></script>
 
     <meta name="robots" content="noindex" />
     <meta name="author" content="Derek Throldahl" />
@@ -267,18 +267,18 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Email</th>
-                    <th>Assigned Test</th>
-                    <th>Session Test</th>
-                    <th>Status</th>
-                    <th>Page load</th>
-                    <th>Start clicked</th>
-                    <th>Audio tested</th>
-                    <th>Copy count</th>
-                    <th>Focus sec</th>
-                    <th>Wall sec</th>
-                    <th>Tab hides</th>
-                    <th>Completed</th>
+                    <th data-sort-table="metrics" data-sort-key="email">Email</th>
+                    <th data-sort-table="metrics" data-sort-key="assigned_test_title">Assigned Test</th>
+                    <th data-sort-table="metrics" data-sort-key="session_test_title">Session Test</th>
+                    <th data-sort-table="metrics" data-sort-key="status">Status</th>
+                    <th data-sort-table="metrics" data-sort-key="created_at" data-sort-type="date">Page load</th>
+                    <th data-sort-table="metrics" data-sort-key="start_clicked_at" data-sort-type="date">Start clicked</th>
+                    <th data-sort-table="metrics" data-sort-key="audio_tested_before_start" data-sort-type="boolean">Audio tested</th>
+                    <th data-sort-table="metrics" data-sort-key="copy_count_before_start" data-sort-type="number">Copy count</th>
+                    <th data-sort-table="metrics" data-sort-key="focus_ms_before_start" data-sort-type="number">Focus sec</th>
+                    <th data-sort-table="metrics" data-sort-key="wall_ms_before_start" data-sort-type="number">Wall sec</th>
+                    <th data-sort-table="metrics" data-sort-key="tab_hidden_count_before_start" data-sort-type="number">Tab hides</th>
+                    <th data-sort-table="metrics" data-sort-key="completed" data-sort-type="boolean">Completed</th>
                   </tr>
                 </thead>
                 <tbody id="metricsBody">
@@ -301,10 +301,10 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Email</th>
-                    <th>Test</th>
-                    <th>Activity</th>
+                    <th data-sort-table="activity" data-sort-key="created_at" data-sort-type="date">Time</th>
+                    <th data-sort-table="activity" data-sort-key="user_email">Email</th>
+                    <th data-sort-table="activity" data-sort-key="test_title">Test</th>
+                    <th data-sort-table="activity" data-sort-key="event_label">Activity</th>
                   </tr>
                 </thead>
                 <tbody id="activityBody">
@@ -403,13 +403,13 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Assigned Test</th>
-                    <th>Status</th>
-                    <th>Completed</th>
-                    <th>Last Login</th>
-                    <th>Created</th>
+                    <th data-sort-table="users" data-sort-key="email">Email</th>
+                    <th data-sort-table="users" data-sort-key="role">Role</th>
+                    <th data-sort-table="users" data-sort-key="test_title">Assigned Test</th>
+                    <th data-sort-table="users" data-sort-key="is_active" data-sort-type="boolean">Status</th>
+                    <th data-sort-table="users" data-sort-key="has_completed" data-sort-type="boolean">Completed</th>
+                    <th data-sort-table="users" data-sort-key="last_login_at" data-sort-type="date">Last Login</th>
+                    <th data-sort-table="users" data-sort-key="created_at" data-sort-type="date">Created</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -488,11 +488,11 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Title</th>
-                    <th>Test Audio</th>
-                    <th>Source Media</th>
-                    <th>Assigned Users</th>
-                    <th>Updated</th>
+                    <th data-sort-table="tests" data-sort-key="title">Title</th>
+                    <th data-sort-table="tests" data-sort-key="test_audio_label">Test Audio</th>
+                    <th data-sort-table="tests" data-sort-key="source_media_label">Source Media</th>
+                    <th data-sort-table="tests" data-sort-key="assigned_count" data-sort-type="number">Assigned Users</th>
+                    <th data-sort-table="tests" data-sort-key="updated_at" data-sort-type="date">Updated</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -543,12 +543,12 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Label</th>
-                    <th>Use</th>
-                    <th>Type</th>
-                    <th>Size</th>
-                    <th>File</th>
-                    <th>Created</th>
+                    <th data-sort-table="media" data-sort-key="label">Label</th>
+                    <th data-sort-table="media" data-sort-key="usage_kind">Use</th>
+                    <th data-sort-table="media" data-sort-key="media_kind">Type</th>
+                    <th data-sort-table="media" data-sort-key="size_bytes" data-sort-type="number">Size</th>
+                    <th data-sort-table="media" data-sort-key="file_path">File</th>
+                    <th data-sort-table="media" data-sort-key="created_at" data-sort-type="date">Created</th>
                     <th>Action</th>
                   </tr>
                 </thead>

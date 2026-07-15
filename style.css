@@ -778,6 +778,35 @@ th {
   background: rgba(0, 0, 0, 0.3);
 }
 
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th.sortable::after {
+  content: "\2195";
+  display: inline-block;
+  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 0.78rem;
+}
+
+th.sortable.sort-asc::after {
+  content: "\2191";
+  color: var(--accent);
+}
+
+th.sortable.sort-desc::after {
+  content: "\2193";
+  color: var(--accent);
+}
+
+th.sortable:focus-visible {
+  outline: 2px solid rgba(125, 211, 252, 0.72);
+  outline-offset: -2px;
+}
+
 .badge {
   display: inline-block;
   padding: 3px 8px;
