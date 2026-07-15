@@ -460,7 +460,7 @@ try {
         s.test_id AS session_test_id,
         st.title AS session_test_title,
         s.created_at,
-        s.start_clicked_at,
+        COALESCE(s.start_clicked_at, started_event.created_at, s.video_started_at, s.video_ended_at) AS start_clicked_at,
         s.video_started_at,
         s.video_ended_at,
         s.completed_at,
@@ -478,10 +478,29 @@ try {
           SELECT id
           FROM captionerner_assessments
           WHERE user_id = u.id {$sessionFilter}
-          ORDER BY created_at DESC, id DESC
+          ORDER BY
+            CASE
+              WHEN video_ended_at IS NOT NULL OR completed_at IS NOT NULL THEN 5
+              WHEN video_started_at IS NOT NULL THEN 4
+              WHEN start_clicked_at IS NOT NULL THEN 3
+              WHEN audio_tested = 1 OR audio_test_count > 0 THEN 2
+              WHEN focus_ms_before_start > 0 OR wall_ms_before_start > 0 OR copy_count > 0 OR tab_switches > 0 THEN 1
+              ELSE 0
+            END DESC,
+            created_at DESC,
+            id DESC
           LIMIT 1
         )
       LEFT JOIN captionerner_tests st ON st.id = s.test_id
+      LEFT JOIN captionerner_activity_log started_event
+        ON started_event.id = (
+          SELECT id
+          FROM captionerner_activity_log
+          WHERE assessment_id = s.id
+            AND event_type = 'test_started'
+          ORDER BY created_at ASC, id ASC
+          LIMIT 1
+        )
       {$whereFilter}
       ORDER BY u.email ASC
       LIMIT {$limit}

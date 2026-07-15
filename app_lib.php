@@ -253,6 +253,7 @@ function captionerner_ensure_schema(PDO $pdo): void {
       video_started_at DATETIME NULL,
       video_ended_at DATETIME NULL,
       completed_at DATETIME NULL,
+      started_email_sent_at DATETIME NULL,
       audio_tested TINYINT(1) NOT NULL DEFAULT 0,
       audio_test_count INT UNSIGNED NOT NULL DEFAULT 0,
       copy_count INT UNSIGNED NOT NULL DEFAULT 0,
@@ -281,6 +282,7 @@ function captionerner_ensure_schema(PDO $pdo): void {
     'video_started_at' => 'video_started_at DATETIME NULL',
     'video_ended_at' => 'video_ended_at DATETIME NULL',
     'completed_at' => 'completed_at DATETIME NULL',
+    'started_email_sent_at' => 'started_email_sent_at DATETIME NULL',
     'audio_tested' => 'audio_tested TINYINT(1) NOT NULL DEFAULT 0',
     'audio_test_count' => 'audio_test_count INT UNSIGNED NOT NULL DEFAULT 0',
     'copy_count' => 'copy_count INT UNSIGNED NOT NULL DEFAULT 0',
@@ -671,6 +673,57 @@ function captionerner_log_activity(PDO $pdo, string $eventType, string $eventLab
     ]);
   } catch (Throwable $e) {
     error_log('captionerner activity log failed: ' . $e->getMessage());
+  }
+}
+
+function captionerner_eastern_timestamp(): string {
+  try {
+    $dt = new DateTimeImmutable('now', new DateTimeZone('America/New_York'));
+    return $dt->format('m/d/Y h:i:s A') . ' ET';
+  } catch (Throwable $e) {
+    return date('m/d/Y h:i:s A') . ' ET';
+  }
+}
+
+function captionerner_send_assessment_started_email(PDO $pdo, int $assessmentId, int $userId, string $userEmail, int $testId): void {
+  if ($assessmentId <= 0 || $userId <= 0 || $userEmail === '') return;
+  if (!captionerner_column_exists($pdo, 'captionerner_assessments', 'started_email_sent_at')) return;
+
+  try {
+    $claim = $pdo->prepare("
+      UPDATE captionerner_assessments
+      SET started_email_sent_at = NOW()
+      WHERE id = ?
+        AND user_id = ?
+        AND started_email_sent_at IS NULL
+      LIMIT 1
+    ");
+    $claim->execute([$assessmentId, $userId]);
+    if ($claim->rowCount() < 1) return;
+
+    $test = captionerner_fetch_test($pdo, $testId);
+    $testTitle = $test && !empty($test['title']) ? (string)$test['title'] : 'NER Assessment';
+    $timestamp = captionerner_eastern_timestamp();
+    $line = "[{$timestamp}] {$userEmail} started {$testTitle}." . PHP_EOL;
+
+    $to = defined('NER_STARTED_EMAIL_TO')
+      ? (string)NER_STARTED_EMAIL_TO
+      : 'dthroldahl@3playmedia.com, mmclaren@3playmedia.com';
+    $from = defined('NER_STARTED_EMAIL_FROM')
+      ? (string)NER_STARTED_EMAIL_FROM
+      : 'Derek@dereksprojects.com';
+    $subject = 'NER Assessment Started: ' . $testTitle;
+    $headers = "From: {$from}\r\nReply-To: {$from}";
+
+    @file_put_contents(__DIR__ . '/feedback.txt', $line, FILE_APPEND | LOCK_EX);
+    $sent = @mail($to, $subject, $line, $headers);
+    if (!$sent) {
+      $reset = $pdo->prepare('UPDATE captionerner_assessments SET started_email_sent_at = NULL WHERE id = ? LIMIT 1');
+      $reset->execute([$assessmentId]);
+      error_log('captionerner started email failed for assessment ' . $assessmentId);
+    }
+  } catch (Throwable $e) {
+    error_log('captionerner started email error: ' . $e->getMessage());
   }
 }
 

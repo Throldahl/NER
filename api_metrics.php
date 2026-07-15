@@ -157,19 +157,44 @@ try {
   }
 
   if ($action === 'video_started') {
+    $focusMs = isset($body['focus_ms_before_start']) ? max(0, (int)$body['focus_ms_before_start']) : 0;
+    $wallMs = isset($body['wall_ms_before_start']) ? max(0, (int)$body['wall_ms_before_start']) : 0;
+    $audioTested = !empty($body['audio_tested_before_start']) ? 1 : 0;
+    $audioTestCount = isset($body['audio_test_count']) ? max(0, (int)$body['audio_test_count']) : 0;
+    $copyCount = isset($body['copy_count_before_start']) ? max(0, (int)$body['copy_count_before_start']) : 0;
+    $tabHiddenCount = isset($body['tab_hidden_count_before_start']) ? max(0, (int)$body['tab_hidden_count_before_start']) : 0;
+
     $stmt = $pdo->prepare("
       UPDATE captionerner_assessments
-      SET video_started_at = IF(video_started_at IS NULL, NOW(), video_started_at)
+      SET
+        start_clicked_at = IF(start_clicked_at IS NULL, NOW(), start_clicked_at),
+        video_started_at = IF(video_started_at IS NULL, NOW(), video_started_at),
+        focus_ms_before_start = GREATEST(focus_ms_before_start, :focus_ms),
+        wall_ms_before_start = GREATEST(wall_ms_before_start, :wall_ms),
+        audio_tested = GREATEST(audio_tested, :audio_tested),
+        audio_test_count = GREATEST(audio_test_count, :audio_test_count),
+        copy_count = GREATEST(copy_count, :copy_count),
+        tab_switches = GREATEST(tab_switches, :tab_switches)
       WHERE id = :id AND user_id = :uid
       LIMIT 1
     ");
-    $stmt->execute([':id' => $sessionId, ':uid' => $userId]);
+    $stmt->execute([
+      ':focus_ms' => $focusMs,
+      ':wall_ms' => $wallMs,
+      ':audio_tested' => $audioTested,
+      ':audio_test_count' => $audioTestCount,
+      ':copy_count' => $copyCount,
+      ':tab_switches' => $tabHiddenCount,
+      ':id' => $sessionId,
+      ':uid' => $userId,
+    ]);
     captionerner_log_activity($pdo, 'media_started', 'Assessment media started', [
       'user_id' => $userId,
       'user_email' => $userEmail,
       'test_id' => $assessmentTestId,
       'assessment_id' => $sessionId,
     ]);
+    captionerner_send_assessment_started_email($pdo, $sessionId, $userId, $userEmail, $assessmentTestId);
     echo json_encode(['ok' => true]);
     exit;
   }
@@ -179,6 +204,8 @@ try {
     $stmt = $pdo->prepare("
       UPDATE captionerner_assessments
       SET
+        start_clicked_at = IF(start_clicked_at IS NULL, NOW(), start_clicked_at),
+        video_started_at = IF(video_started_at IS NULL, NOW(), video_started_at),
         video_ended_at = IF(video_ended_at IS NULL, NOW(), video_ended_at),
         completed_at = IF(completed_at IS NULL, NOW(), completed_at)
       WHERE id = :id AND user_id = :uid

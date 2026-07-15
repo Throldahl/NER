@@ -3,9 +3,9 @@ date_default_timezone_set("America/Chicago");
 
 // Email settings
 $to = "dthroldahl@3playmedia.com, mmclaren@3playmedia.com";
-$from = "Winter-2026-NER@dereksprojects.com";
+$from = "Derek@dereksprojects.com";
 $subject = "Winter 2026 NER Started";
-$headers = "From:" . $from;
+$headers = "From: " . $from . "\r\nReply-To: " . $from;
 
 // Get POSTed JSON
 $data = json_decode(file_get_contents("php://input"), true);
