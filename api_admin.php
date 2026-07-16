@@ -279,12 +279,20 @@ try {
         u.last_login_at,
         u.created_at,
         t.title AS test_title,
-        EXISTS (
-          SELECT 1
-          FROM captionerner_assessments a
-          WHERE a.user_id = u.id
-            AND (a.video_ended_at IS NOT NULL OR a.completed_at IS NOT NULL)
-          LIMIT 1
+        (
+          EXISTS (
+            SELECT 1
+            FROM captionerner_assessments a
+            WHERE a.user_id = u.id
+              AND (a.video_ended_at IS NOT NULL OR a.completed_at IS NOT NULL)
+            LIMIT 1
+          ) OR EXISTS (
+            SELECT 1
+            FROM captionerner_activity_log l
+            WHERE l.user_id = u.id
+              AND l.event_type = 'test_completed'
+            LIMIT 1
+          )
         ) AS has_completed
       FROM captionerner_users u
       LEFT JOIN captionerner_tests t ON t.id = u.test_id
@@ -444,8 +452,11 @@ try {
     $filterTestId = isset($body['test_id']) ? (int)$body['test_id'] : 0;
     $sessionFilter = $filterTestId > 0 ? "AND test_id = {$filterTestId}" : '';
     $whereFilter = $filterTestId > 0
-      ? "WHERE u.test_id = {$filterTestId} OR EXISTS (SELECT 1 FROM captionerner_assessments ax WHERE ax.user_id = u.id AND ax.test_id = {$filterTestId})"
+      ? "WHERE u.test_id = {$filterTestId} OR EXISTS (SELECT 1 FROM captionerner_assessments ax WHERE ax.user_id = u.id AND ax.test_id = {$filterTestId}) OR EXISTS (SELECT 1 FROM captionerner_activity_log lx WHERE lx.user_id = u.id AND lx.event_type = 'test_completed' AND lx.test_id = {$filterTestId})"
       : '';
+    $completionTestFilter = $filterTestId > 0
+      ? "AND completed_lookup.test_id = {$filterTestId}"
+      : "AND (s.test_id IS NULL OR completed_lookup.test_id = s.test_id)";
 
     $sql = "
       SELECT
@@ -457,13 +468,13 @@ try {
         at.title AS assigned_test_title,
         u.created_at AS user_created_at,
         s.id AS session_id,
-        s.test_id AS session_test_id,
-        st.title AS session_test_title,
-        s.created_at,
-        COALESCE(s.start_clicked_at, started_event.created_at, s.video_started_at, s.video_ended_at) AS start_clicked_at,
+        COALESCE(s.test_id, completed_event.test_id) AS session_test_id,
+        COALESCE(st.title, completed_test.title) AS session_test_title,
+        COALESCE(s.created_at, completed_event.created_at) AS created_at,
+        COALESCE(s.start_clicked_at, started_event.created_at, s.video_started_at, s.video_ended_at, completed_event.created_at) AS start_clicked_at,
         s.video_started_at,
-        s.video_ended_at,
-        s.completed_at,
+        COALESCE(s.video_ended_at, completed_event.created_at) AS video_ended_at,
+        COALESCE(s.completed_at, s.video_ended_at, completed_event.created_at) AS completed_at,
         s.audio_tested AS audio_tested_before_start,
         s.audio_test_count,
         s.copy_count AS copy_count_before_start,
@@ -492,6 +503,17 @@ try {
           LIMIT 1
         )
       LEFT JOIN captionerner_tests st ON st.id = s.test_id
+      LEFT JOIN captionerner_activity_log completed_event
+        ON completed_event.id = (
+          SELECT completed_lookup.id
+          FROM captionerner_activity_log completed_lookup
+          WHERE completed_lookup.user_id = u.id
+            AND completed_lookup.event_type = 'test_completed'
+            {$completionTestFilter}
+          ORDER BY completed_lookup.created_at DESC, completed_lookup.id DESC
+          LIMIT 1
+        )
+      LEFT JOIN captionerner_tests completed_test ON completed_test.id = completed_event.test_id
       LEFT JOIN captionerner_activity_log started_event
         ON started_event.id = (
           SELECT id

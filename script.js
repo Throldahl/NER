@@ -439,9 +439,10 @@ document.addEventListener("keydown", (e) => {
 });
 
 function metricStatus(row) {
-  if (!row || !row.created_at) return "Not started";
-  if (Number(row.countdown_cancelled) === 1 && !row.video_started_at) return "Cancelled";
+  if (!row) return "Not started";
   if (row.video_ended_at || row.completed_at) return "Finished";
+  if (!row.created_at) return "Not started";
+  if (Number(row.countdown_cancelled) === 1 && !row.video_started_at) return "Cancelled";
   if (row.video_started_at) return "In progress";
   if (row.start_clicked_at) return "Started";
   return "Loaded";
