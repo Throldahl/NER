@@ -44,19 +44,7 @@ function captionerner_json_out(array $data, int $code = 200): void {
 }
 
 function captionerner_local_config(): array {
-  static $config = null;
-  if (is_array($config)) return $config;
-
-  $config = [];
-  $path = __DIR__ . '/configs/config.php';
-  if (is_file($path)) {
-    $loaded = require $path;
-    if (is_array($loaded)) {
-      $config = $loaded;
-    }
-  }
-
-  return $config;
+  return captionerner_config_values();
 }
 
 function captionerner_google_client_id(): string {
@@ -87,6 +75,150 @@ function captionerner_default_admin_email(): string {
 
   $config = captionerner_local_config();
   return strtolower(trim((string)($config['default_admin_email'] ?? 'dthroldahl@3playmedia.com')));
+}
+
+function captionerner_email_recipients(string $recipients): array {
+  $valid = [];
+  foreach (preg_split('/\s*,\s*/', trim($recipients)) ?: [] as $email) {
+    $email = trim($email);
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+      $valid[strtolower($email)] = $email;
+    }
+  }
+  return array_values($valid);
+}
+
+function captionerner_smtp_read($socket): array {
+  $lines = [];
+  while (($line = fgets($socket, 8192)) !== false) {
+    $lines[] = rtrim($line, "\r\n");
+    if (strlen($line) >= 4 && $line[3] === ' ') break;
+  }
+
+  if (!$lines) {
+    $meta = stream_get_meta_data($socket);
+    throw new RuntimeException(!empty($meta['timed_out']) ? 'SMTP server timed out.' : 'SMTP server closed the connection.');
+  }
+
+  $last = $lines[count($lines) - 1];
+  return [
+    'code' => (int)substr($last, 0, 3),
+    'message' => implode(' | ', $lines),
+  ];
+}
+
+function captionerner_smtp_expect($socket, array $expectedCodes, string $operation): array {
+  $response = captionerner_smtp_read($socket);
+  if (!in_array($response['code'], $expectedCodes, true)) {
+    throw new RuntimeException($operation . ' failed: ' . $response['message']);
+  }
+  return $response;
+}
+
+function captionerner_smtp_write($socket, string $data, string $operation): void {
+  $length = strlen($data);
+  $offset = 0;
+  while ($offset < $length) {
+    $written = fwrite($socket, substr($data, $offset));
+    if ($written === false || $written === 0) {
+      throw new RuntimeException('Could not write SMTP data for ' . $operation . '.');
+    }
+    $offset += $written;
+  }
+}
+
+function captionerner_smtp_command($socket, string $command, array $expectedCodes, string $operation): array {
+  captionerner_smtp_write($socket, $command . "\r\n", $operation);
+  return captionerner_smtp_expect($socket, $expectedCodes, $operation);
+}
+
+function captionerner_send_email(string $recipients, string $subject, string $message): bool {
+  $config = captionerner_local_config();
+  $host = trim((string)($config['alert_smtp_host'] ?? ''));
+  $port = (int)($config['alert_smtp_port'] ?? 0);
+  $encryption = strtolower(trim((string)($config['alert_smtp_encryption'] ?? 'ssl')));
+  $username = trim((string)($config['alert_smtp_username'] ?? ''));
+  $password = (string)($config['alert_smtp_password'] ?? '');
+  $fromEmail = trim((string)($config['alert_from_email'] ?? $username));
+  $fromName = trim((string)($config['alert_from_name'] ?? 'NER'));
+  $timeout = max(1, (int)($config['alert_smtp_timeout'] ?? 15));
+  $to = captionerner_email_recipients($recipients);
+
+  if ($host === '' || $port < 1 || $port > 65535 || $username === '' || $password === '') {
+    error_log('captionerner SMTP is not fully configured in configs/config.php');
+    return false;
+  }
+  if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL) || !$to) {
+    error_log('captionerner SMTP sender or recipient address is invalid');
+    return false;
+  }
+  if (!in_array($encryption, ['ssl', 'tls', 'none'], true)) {
+    error_log('captionerner SMTP encryption must be ssl, tls, or none');
+    return false;
+  }
+
+  $socket = null;
+  try {
+    $transport = $encryption === 'ssl' ? 'ssl' : 'tcp';
+    $socket = stream_socket_client(
+      $transport . '://' . $host . ':' . $port,
+      $errorNumber,
+      $errorMessage,
+      $timeout,
+      STREAM_CLIENT_CONNECT
+    );
+    if (!is_resource($socket)) {
+      throw new RuntimeException('Could not connect to SMTP server (' . $errorNumber . '): ' . $errorMessage);
+    }
+    stream_set_timeout($socket, $timeout);
+
+    captionerner_smtp_expect($socket, [220], 'SMTP greeting');
+    $hostname = preg_replace('/[^a-zA-Z0-9.-]/', '', (string)($_SERVER['SERVER_NAME'] ?? 'localhost')) ?: 'localhost';
+    captionerner_smtp_command($socket, 'EHLO ' . $hostname, [250], 'EHLO');
+
+    if ($encryption === 'tls') {
+      captionerner_smtp_command($socket, 'STARTTLS', [220], 'STARTTLS');
+      if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+        throw new RuntimeException('Could not enable SMTP TLS encryption.');
+      }
+      captionerner_smtp_command($socket, 'EHLO ' . $hostname, [250], 'EHLO after STARTTLS');
+    }
+
+    captionerner_smtp_command($socket, 'AUTH LOGIN', [334], 'SMTP authentication');
+    captionerner_smtp_command($socket, base64_encode($username), [334], 'SMTP username');
+    captionerner_smtp_command($socket, base64_encode($password), [235], 'SMTP password');
+    captionerner_smtp_command($socket, 'MAIL FROM:<' . $fromEmail . '>', [250], 'MAIL FROM');
+    foreach ($to as $email) {
+      captionerner_smtp_command($socket, 'RCPT TO:<' . $email . '>', [250, 251], 'RCPT TO');
+    }
+    captionerner_smtp_command($socket, 'DATA', [354], 'DATA');
+
+    $safeName = str_replace(["\r", "\n", '"'], ['', '', '\\"'], $fromName);
+    $safeSubject = str_replace(["\r", "\n"], '', $subject);
+    $encodedSubject = '=?UTF-8?B?' . base64_encode($safeSubject) . '?=';
+    $body = preg_replace("/\r\n|\r|\n/", "\r\n", $message);
+    $body = preg_replace('/(^|\r\n)\./', '$1..', $body);
+    $headers = [
+      'Date: ' . date(DATE_RFC2822),
+      'From: "' . $safeName . '" <' . $fromEmail . '>',
+      'To: ' . implode(', ', $to),
+      'Reply-To: ' . $fromEmail,
+      'Subject: ' . $encodedSubject,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 8bit',
+    ];
+    $payload = implode("\r\n", $headers) . "\r\n\r\n" . $body . "\r\n.\r\n";
+    captionerner_smtp_write($socket, $payload, 'message body');
+    captionerner_smtp_expect($socket, [250], 'Message delivery');
+    captionerner_smtp_command($socket, 'QUIT', [221], 'QUIT');
+    fclose($socket);
+    return true;
+  } catch (Throwable $e) {
+    if (is_resource($socket)) fclose($socket);
+    error_log('captionerner SMTP delivery failed: ' . $e->getMessage());
+    return false;
+  }
 }
 
 function captionerner_is_google_domain_email(string $email): bool {
@@ -709,14 +841,10 @@ function captionerner_send_assessment_started_email(PDO $pdo, int $assessmentId,
     $to = defined('NER_STARTED_EMAIL_TO')
       ? (string)NER_STARTED_EMAIL_TO
       : 'dthroldahl@3playmedia.com, mmclaren@3playmedia.com';
-    $from = defined('NER_STARTED_EMAIL_FROM')
-      ? (string)NER_STARTED_EMAIL_FROM
-      : 'Derek@dereksprojects.com';
     $subject = 'NER Assessment Started: ' . $testTitle;
-    $headers = "From: {$from}\r\nReply-To: {$from}";
 
     @file_put_contents(__DIR__ . '/feedback.txt', $line, FILE_APPEND | LOCK_EX);
-    $sent = @mail($to, $subject, $line, $headers);
+    $sent = captionerner_send_email($to, $subject, $line);
     if (!$sent) {
       $reset = $pdo->prepare('UPDATE captionerner_assessments SET started_email_sent_at = NULL WHERE id = ? LIMIT 1');
       $reset->execute([$assessmentId]);

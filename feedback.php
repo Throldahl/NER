@@ -1,11 +1,13 @@
 <?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/app_lib.php';
+
 date_default_timezone_set("America/Chicago");
 
 // Email settings
 $to = "dthroldahl@3playmedia.com, mmclaren@3playmedia.com";
-$from = "Derek@dereksprojects.com";
 $subject = "Winter 2026 NER Started";
-$headers = "From: " . $from . "\r\nReply-To: " . $from;
 
 // Get POSTed JSON
 $data = json_decode(file_get_contents("php://input"), true);
@@ -20,6 +22,5 @@ if (!empty($data["feedback"])) {
 
     // Email with timestamp in body
     $message = $logEntry;
-    mail($to, $subject, $message, $headers);
+    captionerner_send_email($to, $subject, $message);
 }
-?>
